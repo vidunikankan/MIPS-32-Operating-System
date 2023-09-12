@@ -1,0 +1,42 @@
+Kernel Output:
+
+sys161: System/161 release 2.0.3, compiled Sep 17 2022 09:27:01
+
+OS/161 base system version 1.99.08
+Copyright (c) 2000, 2001-2005, 2008-2011, 2013, 2014
+   President and Fellows of Harvard College.  All rights reserved.
+
+Put-your-group-name-here's system version 0 (DUMBVM #1)
+
+292k physical memory available
+Device probe...
+lamebus0 (system main bus)
+emu0 at lamebus0
+ltrace0 at lamebus0
+ltimer0 at lamebus0
+beep0 at ltimer0
+rtclock0 at ltimer0
+lrandom0 at lamebus0
+random0 at lrandom0
+lhd0 at lamebus0
+lhd1 at lamebus0
+lser0 at lamebus0
+con0 at lser0
+
+cpu0: MIPS/161 (System/161 2.x) features 0x0
+OS/161 kernel [? for menu]: 
+
+
+Git Log Output:
+commit b418136401685f41832dca4cba0dc11c933fb8fe (HEAD -> master, tag: asst1-start, origin/master)
+Author: vidunikankan <vidunikankan@gmail.com>
+Date:   Tue Sep 12 11:28:23 2023 -0700
+
+    Initial commit of os161 for CPEN331
+
+Git Tag:
+asst1-start
+
+CODE READING EXERCISES:
+
+1.)
