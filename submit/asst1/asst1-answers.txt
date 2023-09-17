@@ -91,3 +91,196 @@ Num     Type           Disp Enb Address    What
 18.)"jal kmain" jumps to the address at label "kmain".
 
 19.) 
+GDB list for ram_boostrap():
+
+ram_bootstrap () at ../../arch/mips/vm/ram.c:60
+60		if (ramsize > 512*1024*1024) {
+(gdb) list
+55		 * we have less than 512 megabytes of memory. If we had more,
+56		 * we wouldn't be able to access it all through kseg0 and
+57		 * everything would get a lot more complicated. This is not a
+58		 * case we are going to worry about.
+59		 */
+60		if (ramsize > 512*1024*1024) {
+61			ramsize = 512*1024*1024;
+62		}
+63
+64		lastpaddr = ramsize;
+66		/*
+67		 * Get first free virtual address from where start.S saved it.
+68		 * Convert to physical address.
+(gdb) n
+70		firstpaddr = firstfree - MIPS_KSEG0;
+(gdb) n
+73			(lastpaddr-firstpaddr)/1024);
+(gdb) list
+68		 * Convert to physical address.
+69		 */
+70		firstpaddr = firstfree - MIPS_KSEG0;
+71
+
+gdb
+72		kprintf("%uk physical memory available\n",
+73			(lastpaddr-firstpaddr)/1024);
+74	}
+
+gdb list for proc_boostrap():
+
+proc_bootstrap () at ../../proc/proc.c:181
+181		kproc = proc_create("[kernel]");
+(gdb) list
+176	 * Create the process structure for the kernel.
+177	 */
+178	void
+179	proc_bootstrap(void)
+180	{
+181		kproc = proc_create("[kernel]");
+182		if (kproc == NULL) {
+183			panic("proc_create for kproc failed\n");
+184		}
+185	}
+
+gdb list for thread_bootstrap():
+
+thread_bootstrap () at ../../thread/thread.c:357
+357		cpuarray_init(&allcpus);
+(gdb) list
+352	thread_bootstrap(void)
+353	{
+354		struct cpu *bootcpu;
+355		struct thread *bootthread;
+356
+357		cpuarray_init(&allcpus);
+358
+359		/*
+360		 * Create the cpu structure for the bootup CPU, the one we're
+361		 * currently running on. Assume the hardware number is 0; that
+(gdb) list
+362		 * might be updated later by mainbus-type code. This also
+363		 * creates a thread structure for the first thread, the one
+364		 * that's already implicitly running when the kernel is
+365		 * started from the bootloader.
+366		 */
+367		bootcpu = cpu_create(0);
+368		bootthread = bootcpu->c_curthread;
+369
+370		/*
+(gdb) list
+370		/*
+371		 * Initializing curcpu and curthread is machine-dependent
+372		 * because either of curcpu and curthread might be defined in
+373		 * terms of the other.
+374		 */
+375		INIT_CURCPU(bootcpu, bootthread);
+376
+377		/*
+378		 * Now make sure both t_cpu and c_curthread are set. This
+379		 * might be partially redundant with INIT_CURCPU depending on
+(gdb) list
+378		 * Now make sure both t_cpu and c_curthread are set. This
+379		 * might be partially redundant with INIT_CURCPU depending on
+380		 * how things are defined.
+381		 */
+382		curthread->t_cpu = curcpu;
+383		curcpu->c_curthread = curthread;
+384
+385		/* cpu_create() should have set t_proc. */
+386		KASSERT(curthread->t_proc != NULL);
+(gdb) list
+385		/* cpu_create() should have set t_proc. */
+386		KASSERT(curthread->t_proc != NULL);
+387
+388		/* Initialize allwchans */
+389		spinlock_init(&allwchans_lock);
+390		wchanarray_init(&allwchans);
+391
+392		/* Done */
+393	}
+
+gdb list for hardclock_bootstrap():
+
+(gdb) list
+64	 */
+65	void
+66	hardclock_bootstrap(void)
+67	{
+68		spinlock_init(&lbolt_lock);
+69		lbolt = wchan_create("lbolt");
+70		if (lbolt == NULL) {
+71			panic("Couldn't create lbolt\n");
+72		}
+73	}
+
+gdb list for vfs_bootstrap():
+
+vfs_bootstrap () at ../../vfs/vfslist.c:101
+101		knowndevs = knowndevarray_create();
+(gdb) list
+96	 * Setup function
+97	 */
+98	void
+99	vfs_bootstrap(void)
+100	{
+101		knowndevs = knowndevarray_create();
+102		if (knowndevs==NULL) {
+103			panic("vfs: Could not create knowndevs array\n");
+104		}
+(gdb) list
+105
+106		vfs_biglock = lock_create("vfs_biglock");
+107		if (vfs_biglock==NULL) {
+108			panic("vfs: Could not create vfs big lock\n");
+109		}
+110		vfs_biglock_depth = 0;
+111
+112		devnull_create();
+113		semfs_bootstrap();
+114	}
+
+
+gdb list at kheap_nextgeneration():
+
+kheap_nextgeneration () at ../../vm/kmalloc.c:708
+708	}
+(gdb) list
+703	#ifdef LABELS
+704		spinlock_acquire(&kmalloc_spinlock);
+705		mallocgeneration++;
+706		spinlock_release(&kmalloc_spinlock);
+707	#endif
+708	}
+
+20.) 
+gdb "p bootcpu" output:
+
+Breakpoint 2, thread_bootstrap () at ../../thread/thread.c:357
+357		cpuarray_init(&allcpus);
+(gdb) p bootcpu
+$1 = (struct cpu *) 0x80000
+
+21.)
+
+gdb "p bootcpu" output after "bootcpu = cpu_create(0)":
+
+(gdb) n
+367		bootcpu = cpu_create(0);
+(gdb)
+368		bootthread = bootcpu->c_curthread;
+(gdb) p bootcpu
+$2 = (struct cpu *) 0x8003af00
+
+
+22.)
+allcpus array before boot():
+
+Breakpoint 4 at 0x800139e4: file ../../main/main.c, line 211.
+(gdb) p allcpus
+$4 = {arr = {v = 0x0, num = 0, max = 0}}
+
+23.)
+allcpus array after boot():
+
+Breakpoint 3, menu (args=0x80035c20 "") at ../../main/menu.c:697
+697		menu_execute(args, 1);
+(gdb) p allcpus
+$3 = {arr = {v = 0x80039fe0, num = 1, max = 4}}
