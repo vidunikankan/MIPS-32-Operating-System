@@ -39,4 +39,55 @@ asst1-start
 
 CODE READING EXERCISES:
 
-1.)
+1.) The first line of code that gets executed when a trap occurs is in "~/os161/src/kern/arch/mips/locore/exception-mips1.S", which is an assembly file. The line is likely the first line, as when we try and cscope uses of this file in code, we are lead to binary files that are unreadable. From that point, control gets transferred over to "~/os161/src/kern/arch/mips/locore/trap.c", where the function "mips_trap()" handles the trap. In the function, if the trap is an interrupt, the kernel turns off interrupts, handlesthe interrupt, then returns to the previous context.
+
+2.) In the directory "~/os161/src/userland/lib/libc/arch/mips" there is a file called "syscalls-mips.S" that contains MIPS assembly code. This code is the user-facing code that invokes a syscall. Line 55, " j __syscall" jumps to the syscall instruction that hands over control to the kernel to deal with the syscall.
+
+3.) The functions in the userland libc seem to include C functions that invoke system calls, where there would be a control switch over to the kernel. These are not in the common libc, as it does not make sense for the kernel to need to access a system call, as control would not need to be switched over. Some of the functions in the user libc also serve as wrappers for the common libc functions, but with some added functionality that would be helpful to the user.
+
+4.)The configure file configures (for example) the optimize debug flag for the level of optimization you want when compiling a C program, and the default location of the root of the installed system. Something that might invalidate the second configuration for example is moving your system root somehow after initial installation. After, you would need to rerun the configure script so that the OSTREE variable is updated.
+
+5.) Code would be "machine-dependent" if it references some sort of architecture-specific hardware that wouldn't be trasnferrable to another machine. For example, if there is a piece of assembly that references a MIPS-specific register, then you can't run that code on an ARM machine, because that register probably won't exist. You want to seperate this code from the general code, because you don't want to have to rewrite all the code when you're running the same program on a different architecture.
+
+6.) 37 registers, because that's the size specified by "KASSERT(sizeof(struct trapframe)==(37*4));" in the file trap.c in "/os161/src/kern/arch/mips/locore".
+
+7.)If we changed a particular cofiguration option for the kernel, say we no longer wanted a particular source file to be used for the kernel's functionality, then we would need to rerun the config script, so that those changes would be applied.
+
+8.)If we decided to remove a dependency completely from the build, then we would need to rerun "bmake depend", as the compiler would need to gather a new list of dependencies. Or, if you were preparing to compile for the first time, you would also need to gather the list of dependencies.
+
+9.)If you have just unzipped all your source code into its respective directories, and need to compile across the source tree, you would run bmake. Once you have done that, you would run "bmake install" to send all the binary files from the previous step into their appropriate directories. Otherwise, if you are not compiling for the first time, you would need to run both commands if you have changed multiple pieces of source code in the tree.
+
+10.) To implement a custom command that would print "Hello World!" to the screen, I would add a shell script to the OS161 /bin directory that would execute "cat Hello World!" every time I called the custom command. The name of the executable file would be the name of the command I wanted to use.
+
+11.) Because OS161 simulates an independent operating system from that of the machine it is running on. If we used the same binaries that the native machine uses to implement utilities, it would likely just execute that routine on the native machine, which is not what we want. We need seperate binaries that run on the simulated OS.
+
+12.) According to the OS161 calling convention, return values are typically returned in the caller-saved registers v0 and v1. It's important for these registers to be caller-saved, as the return value would otherwise be clobbering the data the caller would have left in them.
+
+13.)In order to implement a new syscall, we would need to edit:
+	- "~/os161/src/kern/syscall/", we would need to add a C file that contains the procedure for doing whatever that syscall does.
+	- "~/os161/src/kern/arch/mips/syscall/syscall.c", to the C file we would need to add a case for the new call number of the syscall that we've just implemented
+	- "~/os161/src/kern/include/kern/syscall.h", to the syscall header file we would also need to add a unique call number, if it is not defined already, so that the syscall.c switch statement correctly identifies the syscall and calls the right function.
+
+14.) The very first function that executes when os161 starts is called "__start ()".
+
+15.) "addiu sp, sp, -24" is the vry first assembly instruction, which is just moving the stack pointer.
+
+16.) GDB "info b" output:
+
+(gdb) info b
+Num     Type           Disp Enb Address    What
+1       breakpoint     keep y   0x800139e4 in kmain at ../../main/main.c:211
+	breakpoint already hit 2 times
+2       breakpoint     keep y   0x800138f0 in sys_reboot at ../../main/main.c:174
+	breakpoint already hit 1 time
+3       breakpoint     keep y   0x800139e4 in kmain at ../../main/main.c:211
+	breakpoint already hit 1 time
+5       breakpoint     keep y   0x8002d18c in mainbus_bootstrap at ../../arch/sys161/dev/lamebus_machdep.c:89
+6       breakpoint     keep y   0x8002d1c4 in mainbus_bootstrap at ../../arch/sys161/dev/lamebus_machdep.c:92
+
+
+17.) Between the jump to "__start" and the jump to "kmain()", the assembly code is setting up the memory virtualization for os161, copying exception handlers onto the bootstack, flushing the cache, intializing the TLB for adress translation and intializing a bunch of other special registers.
+
+18.)"jal kmain" jumps to the address at label "kmain".
+
+19.) 
