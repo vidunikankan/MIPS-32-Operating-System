@@ -57,40 +57,57 @@ CODE READING EXERCISES:
 
 9.)If you have just unzipped all your source code into its respective directories, and need to compile across the source tree, you would run bmake. Once you have done that, you would run "bmake install" to send all the binary files from the previous step into their appropriate directories. Otherwise, if you are not compiling for the first time, you would need to run both commands if you have changed multiple pieces of source code in the tree.
 
-10.) To implement a custom command that would print "Hello World!" to the screen, I would add a shell script to the OS161 /bin directory that would execute "cat Hello World!" every time I called the custom command. The name of the executable file would be the name of the command I wanted to use.
 
-11.) Because OS161 simulates an independent operating system from that of the machine it is running on. If we used the same binaries that the native machine uses to implement utilities, it would likely just execute that routine on the native machine, which is not what we want. We need seperate binaries that run on the simulated OS.
+10.) To implement a command to the kernel like the ones in the menu when you boot up os161, you would have to edit the file
+menu.c in "~/os161/src/kern/main" in the following places:
+	- Add a custom function to the section starting at line 163 that implements whatever you'd want the command to do. In our case, we could have a function cmd_hw() that calls kprintf() to print "Hello World!".
+	- You'd also have to add a string to either the opsmenu array or mainmenu array at lines 434 and 502, respectively, to describe the command to the user.
+	- You'd also need to add the command name and the name of the function you wrote in step 1 to the cmdtable array at line 530, so that when the user tries to run the command, it actually works.
 
-12.) According to the OS161 calling convention, return values are typically returned in the caller-saved registers v0 and v1. It's important for these registers to be caller-saved, as the return value would otherwise be clobbering the data the caller would have left in them.
+11.) Because OS161 simulates an independent operating system from that of the machine it is running on. If we used the same binaries that the native machine uses to implement utilities, it would likely just execute that routine on the native machine, which is not what we want. We need seperate binaries that run on the simulated OS. Also, certain utilities are machine-dependent, making it impossible to use code from a presumably different machine.
 
-13.)In order to implement a new syscall, we would need to edit:
+12.) In crt0.S, the startup code for user programs, the return value from the user program is moved to s0 and a0 so that it can serve as the argument for the exit() function, which is called immediately after.  
+
+13.) In order to implement a new syscall, we would need to edit:
 	- "~/os161/src/kern/syscall/", we would need to add a C file that contains the procedure for doing whatever that syscall does.
 	- "~/os161/src/kern/arch/mips/syscall/syscall.c", to the C file we would need to add a case for the new call number of the syscall that we've just implemented
 	- "~/os161/src/kern/include/kern/syscall.h", to the syscall header file we would also need to add a unique call number, if it is not defined already, so that the syscall.c switch statement correctly identifies the syscall and calls the right function.
 
-14.) The very first function that executes when os161 starts is called "__start ()".
+GDB output for questions 14 & 15:
+(gdb) db
+__start () at ../../arch/sys161/main/start.S:54
+54	   addiu sp, sp, -24
 
-15.) "addiu sp, sp, -24" is the vry first assembly instruction, which is just moving the stack pointer.
+14.) The very first function is called "__start".
 
-16.) GDB "info b" output:
+15.) The very first line of assembly is "addiu sp, sp, -24".
 
+16.) gdb output:
 (gdb) info b
 Num     Type           Disp Enb Address    What
 1       breakpoint     keep y   0x800139e4 in kmain at ../../main/main.c:211
-	breakpoint already hit 2 times
-2       breakpoint     keep y   0x800138f0 in sys_reboot at ../../main/main.c:174
 	breakpoint already hit 1 time
-3       breakpoint     keep y   0x800139e4 in kmain at ../../main/main.c:211
-	breakpoint already hit 1 time
-5       breakpoint     keep y   0x8002d18c in mainbus_bootstrap at ../../arch/sys161/dev/lamebus_machdep.c:89
-6       breakpoint     keep y   0x8002d1c4 in mainbus_bootstrap at ../../arch/sys161/dev/lamebus_machdep.c:92
-
+2       breakpoint     keep y   0x80014a0c in menu at ../../main/menu.c:697
 
 17.) Between the jump to "__start" and the jump to "kmain()", the assembly code is setting up the memory virtualization for os161, copying exception handlers onto the bootstack, flushing the cache, intializing the TLB for adress translation and intializing a bunch of other special registers.
 
 18.)"jal kmain" jumps to the address at label "kmain".
 
-19.) 
+19.)
+GDB list for boot() early init:
+
+(gdb) list
+104		kprintf("Put-your-group-name-here's system version %s (%s #%d)\n",
+105			GROUP_VERSION, buildconfig, buildversion);
+106		kprintf("\n");
+107
+108		/* Early initialization. */
+109		ram_bootstrap();
+110		proc_bootstrap();
+111		thread_bootstrap();
+112		hardclock_bootstrap();
+113		vfs_bootstrap();
+
 GDB list for ram_boostrap():
 
 ram_bootstrap () at ../../arch/mips/vm/ram.c:60
@@ -274,13 +291,19 @@ $2 = (struct cpu *) 0x8003af00
 allcpus array before boot():
 
 Breakpoint 4 at 0x800139e4: file ../../main/main.c, line 211.
-(gdb) p allcpus
-$4 = {arr = {v = 0x0, num = 0, max = 0}}
+(gdb) cpuarray allcpus
+0 cpus
 
 23.)
 allcpus array after boot():
 
 Breakpoint 3, menu (args=0x80035c20 "") at ../../main/menu.c:697
-697		menu_execute(args, 1);
-(gdb) p allcpus
-$3 = {arr = {v = 0x80039fe0, num = 1, max = 4}}
+(gdb) cpuarray allcpus
+1 cpus
+cpu 0:
+$1 = {c_self = 0x8003af00, c_number = 0, c_hardware_number = 0, c_curthread = 0x8003bf80, c_zombies = {tl_head = {
+      tln_prev = 0x0, tln_next = 0x8003af1c, tln_self = 0x0}, tl_tail = {tln_prev = 0x8003af10, tln_next = 0x0, tln_self = 0x0},
+    tl_count = 0}, c_hardclocks = 1, c_spinlocks = 0, c_isidle = false, c_runqueue = {tl_head = {tln_prev = 0x0,
+      tln_next = 0x8003af44, tln_self = 0x0}, tl_tail = {tln_prev = 0x8003af38, tln_next = 0x0, tln_self = 0x0}, tl_count = 0},
+  c_runqueue_lock = {splk_lock = 0, splk_holder = 0x0}, c_ipi_pending = 0, c_shootdown = {{
+      ts_placeholder = 0} <repeats 16 times>}, c_numshootdown = 0, c_ipi_lock = {splk_lock = 0, splk_holder = 0x0}}
