@@ -155,6 +155,20 @@ lock_create(const char *name)
         }
 
         // add stuff here as needed
+		lock->held = 0;
+		lock->holder = NULL;
+		
+		//init'ing wait channel
+		lock->lock_wchan = wchan_create(lock->lk_name);
+		//error checking
+		if(lock->lock_wchan == NULL){
+			kfree(lock->lk_name);
+			kfree(lock);
+			return NULL;
+		}
+
+		//spinlock init
+		spinlock_init(&lock->lock_splk);
 
         return lock;
 }
@@ -165,7 +179,9 @@ lock_destroy(struct lock *lock)
         KASSERT(lock != NULL);
 
         // add stuff here as needed
-
+		
+		spinlock_cleanup(&lock->lock_splk);
+		wchan_destroy(lock->lock_wchan);
         kfree(lock->lk_name);
         kfree(lock);
 }
@@ -174,26 +190,45 @@ void
 lock_acquire(struct lock *lock)
 {
         // Write this
+		KASSERT(lock != NULL);
+		KASSERT(curthread->t_in_interrupt == false);
+		KASSERT(!lock_do_i_hold(lock));
 
-        (void)lock;  // suppress warning until code gets written
+
+		spinlock_acquire(&lock->lock_splk);
+		while(lock->held == 1){
+			wchan_sleep(lock->lock_wchan, &lock->lock_splk);
+		}
+		KASSERT(lock->held == 0);
+		lock->held = 1;
+		lock->holder = curthread;
+		spinlock_release(&lock->lock_splk);
+
 }
 
 void
 lock_release(struct lock *lock)
 {
         // Write this
-
-        (void)lock;  // suppress warning until code gets written
+	KASSERT(lock != NULL);
+	KASSERT(lock_do_i_hold(lock));
+	spinlock_acquire(&lock->lock_splk);
+ 
+         lock->held = 0;
+		 lock->holder = NULL;
+         KASSERT(lock->held == 0);
+     wchan_wakeone(lock->lock_wchan, &lock->lock_splk);
+     spinlock_release(&lock->lock_splk);
 }
 
 bool
 lock_do_i_hold(struct lock *lock)
 {
         // Write this
-
-        (void)lock;  // suppress warning until code gets written
-
-        return true; // dummy until code gets written
+		KASSERT(lock!= NULL);
+		if(lock->held == 0) return false;
+		if(lock->holder == curthread) return true;
+		else return false;
 }
 
 ////////////////////////////////////////////////////////////
@@ -216,8 +251,18 @@ cv_create(const char *name)
                 kfree(cv);
                 return NULL;
         }
+		
+		cv->cv_wchan = wchan_create(cv->cv_name);
+		if(cv->cv_name == NULL){
+			kfree(cv->cv_name);
+			kfree(cv);
+			return NULL;
+		}
+		
 
-        // add stuff here as needed
+		spinlock_init(&cv->cv_splk); 
+		spinlock_init(&cv->cv_splk_2);
+	   // add stuff here as needed
 
         return cv;
 }
@@ -228,31 +273,54 @@ cv_destroy(struct cv *cv)
         KASSERT(cv != NULL);
 
         // add stuff here as needed
-
-        kfree(cv->cv_name);
+        wchan_destroy(cv->cv_wchan);
+	   spinlock_cleanup(&cv->cv_splk);
+	   spinlock_cleanup(&cv->cv_splk_2);
+		kfree(cv->cv_name);
         kfree(cv);
 }
 
 void
 cv_wait(struct cv *cv, struct lock *lock)
 {
-        // Write this
-        (void)cv;    // suppress warning until code gets written
-        (void)lock;  // suppress warning until code gets written
+	KASSERT(cv != NULL);	
+	KASSERT(lock != NULL);
+	KASSERT(lock_do_i_hold(lock));
+	
+
+	spinlock_acquire(&cv->cv_splk);
+		lock_release(lock);
+		wchan_sleep(cv->cv_wchan, &cv->cv_splk);
+	spinlock_release(&cv->cv_splk);
+		lock_acquire(lock);
 }
 
 void
 cv_signal(struct cv *cv, struct lock *lock)
 {
         // Write this
-	(void)cv;    // suppress warning until code gets written
-	(void)lock;  // suppress warning until code gets written
+	KASSERT(cv != NULL);
+	KASSERT(lock != NULL);
+	KASSERT(lock_do_i_hold(lock));	
+	//	KASSERT(!wchan_isempty(cv->cv_wchan, &cv->cv_splk));
+
+	spinlock_acquire(&cv->cv_splk_2);
+		wchan_wakeone(cv->cv_wchan, &cv->cv_splk_2);
+	spinlock_release(&cv->cv_splk_2);
+
+
 }
 
 void
 cv_broadcast(struct cv *cv, struct lock *lock)
 {
 	// Write this
-	(void)cv;    // suppress warning until code gets written
-	(void)lock;  // suppress warning until code gets written
+	KASSERT(cv != NULL);
+	KASSERT(lock != NULL);
+	KASSERT(lock_do_i_hold(lock));
+	//	KASSERT(!wchan_isempty(cv->cv_wchan, &cv->cv_splk));
+
+	spinlock_acquire(&cv->cv_splk_2);
+		wchan_wakeall(cv->cv_wchan, &cv->cv_splk_2);
+	spinlock_release(&cv->cv_splk_2);
 }

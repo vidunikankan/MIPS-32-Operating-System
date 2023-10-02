@@ -1,0 +1,29 @@
+Cde Reading Exercises:
+
+1.) When a thread exits, it removes itself from the process it was conducting, checks the thread stack's guard band to ensure that it hasn't overflowed, and switches the thread to a zombie state. When a thread goes to sleep, first we ensure that it is not running an interrupt handle process, because sleeping during that will cause issues for the user. Then, it acquires the lock for that wait channel to ensure it is not sleeping at the same time as another thread. Then we switch threads, and relock the spinlock, as it gets released during thread_switch().
+
+2.)thread_switch() is called whenever a context switch is required. In the function, interrupts are disabled, the thread stack is checked, put away, then a context switch happens where all of the register information is swapped. The switched thread may or may not return to thread_switch() after the context switch, so the new thread may be tasked with executing the remaining few tasks. These tasks include setting the new thread state to "S_RUN," clearing the wait channel, cleaning up dead threads, and turning interrupts back on.
+
+3.) Thread states:
+
+S_RUN: Signifies the thread is running. thread_switch() changes the new thread's state to this at the very end of the function, but other functions also set this, in case the context switch doesn't result in a return to thread_switch().
+
+S_READY: Signifies that a thread is ready to run. In the context of the previous question, the new thread can be in this state as the context switch occurs.
+
+S_SLEEP: Implies that the current thread is asleep.
+
+S_ZOMBIE: The thread is in a zombie state; it has exited but it has not been deleted completely. If exorcise() is not called, the thread will remain in this state.
+
+4.) Interrupts are turned off in the thread source code whenever a critical section is about to be entered. For example, interrupts are turned off in thread_switch() before a context switch, in case an interrupt occurs after the spinlock is acquired. This is important, as switching contexts into an interrupt handler while the original thread holds a spinlock can result in a deadlock. This is because the interrupt handler of the same CPU will not switch back to the context without finishing its task. However, if it requires the spinlock held by the previous thread to finish, then it will spin forever waiting for the previous thread to release the lock, which it cannot do without the interrupt handler finishing. Interrupts are turned off in the source code by calling splhigh(), which sets the local interrupt priority level to low.
+
+5.) A sleeping thread is woken up by a thread releasing a spinlock, so that the woken thread can now try and attempt to acquire the lock without futile spinning. It gets to run by being put onto the runqueue by the queue that is releasing the spinlock.To do this, the thread releasing the lock must acquire the runqueue lock, then change the state of the sleeping thread to S_READY.
+
+6.) In thread_switch(), the threadlist_remhead() function essentially "selects" the next thread to run off of the runqueue. There isn't really a "choice" happening, as the next thread that gets to run is determined by what is at the front of the queue.
+
+7.) As stated above, the thread is simply selected from the head of the runqueue, which has the threads that are ready to run, in the order that they were committed.
+
+8.) In scheduling, the hardware timer keeps track of how much time has passed whilst a particular process is running. Once a certain threshold has been exceeded, a timer interrupt is thrown to invoke the scheduler. The scheduler then determines the highest priority task to switch contexts into from the current one. The function 'thread_yield()' is called on timer interrupt inorder to yield the CPU to the next priority process.
+
+9.) In order to implement a semaphore, we need to ensure that there is no wasteful spinning done by any of the threads. So while if a thread attempts to acquire one of the spinlocks in a semaphorea and is unable to, it puts itself to sleep in the approappropriate wait channel, where it waits for a currently running thread to release a lock. When a lock is released, a thread from the wait channel is woken up and put on the runqueue. The releasing thread then atomically pops the queue head and allows for a context switch to occur so that the waiting thread is able to acquire the lock. wchan_sleep() is called in the first step, while wchan_wakeone() is called when a lock is being released.
+
+10.) There is a semaphore spinlock to access the waitchannel as well– in order to sleep on the wait channel or wake a thread from it, we need to acquire the spinlock to do so. This ensures that no thread misses a wakeup call from a releasing thread.
