@@ -117,10 +117,14 @@ bool lock_do_i_hold(struct lock *);
 
 struct cv {
         char *cv_name;
+<<<<<<< HEAD
 		struct wchan *cv_wchan;
 		struct spinlock cv_splk;
 		struct spinlock cv_splk_2;
 		// add what you need here
+=======
+        // add what you need here
+>>>>>>> instructor/synchprobs
         // (don't forget to mark things volatile as needed)
 };
 
