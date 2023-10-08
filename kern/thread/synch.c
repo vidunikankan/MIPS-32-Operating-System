@@ -180,15 +180,12 @@ lock_destroy(struct lock *lock)
 {
         KASSERT(lock != NULL);
 
-<<<<<<< HEAD
 		// clean & destroy the objects
 
 		spinlock_cleanup(&lock->lock_splk);
 		wchan_destroy(lock->lock_wchan);
-=======
         // add stuff here as needed
 
->>>>>>> instructor/synchprobs
         kfree(lock->lk_name);
         kfree(lock);
 }
@@ -196,7 +193,6 @@ lock_destroy(struct lock *lock)
 void
 lock_acquire(struct lock *lock)
 {
-<<<<<<< HEAD
 		
 		KASSERT(lock != NULL);
 		KASSERT(curthread->t_in_interrupt == false);
@@ -219,17 +215,14 @@ lock_acquire(struct lock *lock)
 
 		spinlock_release(&lock->lock_splk);
 
-=======
         // Write this
 
-        (void)lock;  // suppress warning until code gets written
->>>>>>> instructor/synchprobs
+       // (void)lock;  // suppress warning until code gets written
 }
 
 void
 lock_release(struct lock *lock)
 {
-<<<<<<< HEAD
 	KASSERT(lock != NULL);
 	KASSERT(lock_do_i_hold(lock));
 	
@@ -246,17 +239,14 @@ lock_release(struct lock *lock)
 
 	
      spinlock_release(&lock->lock_splk);
-=======
         // Write this
 
-        (void)lock;  // suppress warning until code gets written
->>>>>>> instructor/synchprobs
+       // (void)lock;  // suppress warning until code gets written
 }
 
 bool
 lock_do_i_hold(struct lock *lock)
 {
-<<<<<<< HEAD
 		KASSERT(lock!= NULL);
 		
 		//if lock not held at all
@@ -265,13 +255,10 @@ lock_do_i_hold(struct lock *lock)
 		//if we are holding the lock
 		if(lock->holder == curthread) return true;
 		else return false;
-=======
         // Write this
 
-        (void)lock;  // suppress warning until code gets written
+       // (void)lock;  // suppress warning until code gets written
 
-        return true; // dummy until code gets written
->>>>>>> instructor/synchprobs
 }
 
 ////////////////////////////////////////////////////////////
@@ -294,7 +281,6 @@ cv_create(const char *name)
                 kfree(cv);
                 return NULL;
         }
-<<<<<<< HEAD
 	
 		//init wait channel
 		cv->cv_wchan = wchan_create(cv->cv_name);
@@ -307,10 +293,8 @@ cv_create(const char *name)
 		//init spinlocks for wc
 		spinlock_init(&cv->cv_splk); 
 		spinlock_init(&cv->cv_splk_2);
-=======
 
         // add stuff here as needed
->>>>>>> instructor/synchprobs
 
         return cv;
 }
@@ -320,24 +304,19 @@ cv_destroy(struct cv *cv)
 {
         KASSERT(cv != NULL);
 
-<<<<<<< HEAD
         //destroying objs and freeing cv
 		wchan_destroy(cv->cv_wchan);
 	   spinlock_cleanup(&cv->cv_splk);
 	   spinlock_cleanup(&cv->cv_splk_2);
 		kfree(cv->cv_name);
-=======
         // add stuff here as needed
 
-        kfree(cv->cv_name);
->>>>>>> instructor/synchprobs
         kfree(cv);
 }
 
 void
 cv_wait(struct cv *cv, struct lock *lock)
 {
-<<<<<<< HEAD
 	KASSERT(cv != NULL);	
 	KASSERT(lock != NULL);
 	KASSERT(lock_do_i_hold(lock));
@@ -355,17 +334,12 @@ cv_wait(struct cv *cv, struct lock *lock)
 	spinlock_release(&cv->cv_splk);
 
 		lock_acquire(lock);
-=======
         // Write this
-        (void)cv;    // suppress warning until code gets written
-        (void)lock;  // suppress warning until code gets written
->>>>>>> instructor/synchprobs
 }
 
 void
 cv_signal(struct cv *cv, struct lock *lock)
 {
-<<<<<<< HEAD
 	KASSERT(cv != NULL);
 	KASSERT(lock != NULL);
 	KASSERT(lock_do_i_hold(lock));	
@@ -379,17 +353,14 @@ cv_signal(struct cv *cv, struct lock *lock)
 	spinlock_release(&cv->cv_splk_2);
 
 
-=======
         // Write this
-	(void)cv;    // suppress warning until code gets written
-	(void)lock;  // suppress warning until code gets written
->>>>>>> instructor/synchprobs
+	//(void)cv;    // suppress warning until code gets written
+	//(void)lock;  // suppress warning until code gets written
 }
 
 void
 cv_broadcast(struct cv *cv, struct lock *lock)
 {
-<<<<<<< HEAD
 	KASSERT(cv != NULL);
 	KASSERT(lock != NULL);
 	KASSERT(lock_do_i_hold(lock));
@@ -401,9 +372,7 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 		wchan_wakeall(cv->cv_wchan, &cv->cv_splk_2);
 
 	spinlock_release(&cv->cv_splk_2);
-=======
 	// Write this
-	(void)cv;    // suppress warning until code gets written
-	(void)lock;  // suppress warning until code gets written
->>>>>>> instructor/synchprobs
+//	(void)cv;    // suppress warning until code gets written
+//	(void)lock;  // suppress warning until code gets written
 }

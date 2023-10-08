@@ -759,8 +759,6 @@ thread_startup(void (*entrypoint)(void *data1, unsigned long data2),
 	/* Enable interrupts. */
 	spl0();
 
-<<<<<<< HEAD
-=======
 #if OPT_SYNCHPROBS
 	/* Yield a random number of times to get a good mix of threads. */
 	{
@@ -772,7 +770,6 @@ thread_startup(void (*entrypoint)(void *data1, unsigned long data2),
 	}
 #endif
 
->>>>>>> instructor/synchprobs
 	/* Call the function. */
 	entrypoint(data1, data2);
 
