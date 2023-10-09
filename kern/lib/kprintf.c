@@ -170,6 +170,7 @@ panic(const char *fmt, ...)
 		evil = 3;
 
 		/* Print the message. */
+		kprintf("%p\n", curthread);
 		kprintf("panic: ");
 		va_start(ap, fmt);
 		__vprintf(console_send, NULL, fmt, ap);
