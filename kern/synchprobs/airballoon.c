@@ -227,14 +227,14 @@ next:			if(ropes_left <  2){
 					goto next;
 				}	
 					
-				
+					lock_release(fk_lock);
 					struct Rope *temp;
 					temp = allStakes[idx2]->rope;
 					allStakes[idx2]->rope = allStakes[idx1]->rope;
 					allStakes[idx1]->rope = temp;
 					temp = NULL;
 					//kprintf("pointers swapped %d %d \n", idx1, idx2);
-					lock_release(fk_lock);
+					//lock_release(fk_lock);
 					if(idx2 > idx1){
 					lock_release(allStakes[idx1]->rope->rope_lock);
 					lock_release(allStakes[idx2]->rope->rope_lock);
