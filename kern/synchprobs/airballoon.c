@@ -213,20 +213,25 @@ start:			if(ropes_left != 0){
 				goto start;
 				}
 
-next:			if(ropes_left < 2){
+next:			if(ropes_left <  2){
 					lock_release(allStakes[idx1]->rope->rope_lock);
 					lock_release(fk_lock);
 					goto finish;
 				}
-				while(idx2 < idx1 || idx2 == idx1){
+			//	while(1){
+				
 				idx2 = random() % (NROPES);
-				}
+			//	if(idx2 < idx1 || idx2 == idx1) break;
+				//KASSERT(idx2 < idx1 || idx2 == idx1);
+			//	}
+				if(idx2 == idx1 || idx2 < idx1) goto next;
 
 				lock_acquire(allStakes[idx2]->rope->rope_lock);
 				if(allStakes[idx2]->rope->is_severed){
 					lock_release(allStakes[idx2]->rope->rope_lock);
 					goto next;
-				}
+				}	
+					
 				
 					struct Rope *temp;
 					temp = allStakes[idx2]->rope;
@@ -234,26 +239,25 @@ next:			if(ropes_left < 2){
 					allStakes[idx1]->rope = temp;
 					temp = NULL;
 					//kprintf("pointers swapped %d %d \n", idx1, idx2);
-				
-					lock_release(allStakes[idx2]->rope->rope_lock);
+					//lock_release(fk_lock);		
 					lock_release(allStakes[idx1]->rope->rope_lock);
-					
+					lock_release(allStakes[idx2]->rope->rope_lock);
+					lock_release(fk_lock);
 				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx1]->rope->index, allStakes[idx2]->index, allStakes[idx1]->index);
 				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx2]->rope->index, allStakes[idx1]->index, allStakes[idx2]->index);		
-					lock_release(fk_lock);
-
+				
 					thread_yield();
 					goto start;
 					}
 							
 finish:				lock_acquire(fk_lock_2);
-					flowerkiller_done++;	
-					lock_release(fk_lock_2);
+						flowerkiller_done += 1;	
 					kprintf("incremented done counter %d\n", flowerkiller_done);
 			
 					if(flowerkiller_done == N_LORD_FLOWERKILLER){
-					kprintf("Lord FlowerKiller thread done\n");
+						kprintf("Lord FlowerKiller thread done\n");
 					}
+					lock_release(fk_lock_2);
 
 					thread_exit();
 
@@ -268,17 +272,15 @@ balloon(void *p, unsigned long arg)
 
 	kprintf("Balloon thread starting\n");
 	
-	while((dandelion_done + marigold_done) != 2){
+	while((dandelion_done + marigold_done + flowerkiller_done) != 2 + N_LORD_FLOWERKILLER){
 		thread_yield();
 	}
+	lock_acquire(nropes_lock);
 	kprintf("Balloon freed and Prince Dandelion escapes!\n");		
 	
-	kprintf("Lord FlowerKiller thread done\n");
-
-	lock_acquire(nropes_lock);	
+	kprintf("Balloon thread done\n");
 	cv_signal(nropes_cv, nropes_lock);
 	lock_release(nropes_lock);
-	kprintf("Balloon thread done\n");
 	thread_exit();
 
 }
