@@ -10,7 +10,7 @@
 #define NROPES 16
 static int ropes_left = NROPES;
 static int dandelion_done = 0;
-static int marigold_done = 0;
+static int marigold_done= 0;
 static int flowerkiller_done = 0;
 struct Stake *stake_create(int indx);
 
@@ -58,7 +58,7 @@ void rope_destroy(struct Rope *rope)
 }
 
 struct Stake{
-volatile int index;
+int index;
 struct Rope *rope;
 };
 
@@ -98,6 +98,7 @@ struct Rope *allRopes[NROPES];
 struct lock *nropes_lock;
 struct lock *fk_lock;
 struct lock *fk_lock_2;
+struct lock *done_lock;
 struct cv *fk_cv;
 struct cv *nropes_cv;
 /* Implement this! */
@@ -131,13 +132,14 @@ static void dandelion(void *p, unsigned long arg)
 					KASSERT(ropes_left > 0);
 					ropes_left -= 1;
 					lock_release(nropes_lock);
+					lock_release(allRopes[idx]->rope_lock);
 					kprintf("Dandelion severed rope %d\n", allRopes[idx]->index);
 				}
-				lock_release(allRopes[idx]->rope_lock);
 				thread_yield();
 				goto start;
 			}
 	
+
 	kprintf("Dandelion thread done\n");
 	lock_acquire(nropes_lock);
 	dandelion_done = 1;
@@ -168,14 +170,15 @@ start:	if(ropes_left != 0){
 				KASSERT(ropes_left > 0);
 				ropes_left -= 1;
 				lock_release(nropes_lock);
+				lock_release(allStakes[idx]->rope->rope_lock);
 				kprintf("Marigold severed rope %d from stake %d\n", allStakes[idx]->rope->index, allStakes[idx]->index);
 			}
-			lock_release(allStakes[idx]->rope->rope_lock);
 			thread_yield();
 			goto start;
 				
 		}
-
+		
+		
 		kprintf("Marigold thread done\n");
 		lock_acquire(nropes_lock);
 		marigold_done = 1;
@@ -192,54 +195,67 @@ flowerkiller(void *p, unsigned long arg)
 	(void)arg;
 
 	kprintf("Lord FlowerKiller thread starting\n");
-start: if(ropes_left > 1){
-			int idx = 0;
-			idx = random()%(NROPES);
-			KASSERT(idx <  NROPES && idx > -1);
-			lock_acquire(fk_lock);
-			lock_acquire(allStakes[idx]->rope->rope_lock);
-			if(!allStakes[idx]->rope->is_severed){
-				goto next;
-			} else {
+	volatile int idx1 = 0;
+	volatile int idx2 = 0;
+	//kprintf("entering start \n");
+start:			if(ropes_left != 0){
+				idx1 = random() % (NROPES);	
+				idx2 = random() % (NROPES);	
+				if(idx1 == (NROPES-1)) goto start;
+				lock_acquire(fk_lock);
+				lock_acquire(allStakes[idx1]->rope->rope_lock);
+				
+				if(!allStakes[idx1]->rope->is_severed) goto next;
+				else
+				{
+				lock_release(allStakes[idx1]->rope->rope_lock);
 				lock_release(fk_lock);
-				lock_release(allStakes[idx]->rope->rope_lock);
 				goto start;
-			}
-		next:	if(ropes_left < 2){
-					lock_release(fk_lock);
-					lock_release(allStakes[idx]->rope->rope_lock);
-					goto done;
 				}
-				int idx2 = 0;
-				idx2 = random()%(NROPES);
-				KASSERT(idx2 < NROPES && idx2 > -1);
-				if(idx2 == idx) goto next;
+
+next:			if(ropes_left < 2){
+					lock_release(allStakes[idx1]->rope->rope_lock);
+					lock_release(fk_lock);
+					goto finish;
+				}
+				while(idx2 < idx1 || idx2 == idx1){
+				idx2 = random() % (NROPES);
+				}
+
 				lock_acquire(allStakes[idx2]->rope->rope_lock);
-					if(allStakes[idx2]->rope->is_severed){
-						lock_release(allStakes[idx2]->rope->rope_lock);	
-						goto next;	
+				if(allStakes[idx2]->rope->is_severed){
+					lock_release(allStakes[idx2]->rope->rope_lock);
+					goto next;
+				}
+				
+					struct Rope *temp;
+					temp = allStakes[idx2]->rope;
+					allStakes[idx2]->rope = allStakes[idx1]->rope;
+					allStakes[idx1]->rope = temp;
+					temp = NULL;
+					//kprintf("pointers swapped %d %d \n", idx1, idx2);
+				
+					lock_release(allStakes[idx2]->rope->rope_lock);
+					lock_release(allStakes[idx1]->rope->rope_lock);
+					
+				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx1]->rope->index, allStakes[idx2]->index, allStakes[idx1]->index);
+				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx2]->rope->index, allStakes[idx1]->index, allStakes[idx2]->index);		
+					lock_release(fk_lock);
+
+					thread_yield();
+					goto start;
 					}
-				struct Rope *temp;
-				temp = allStakes[idx2]->rope;
-				allStakes[idx2]->rope = allStakes[idx]->rope;
-				allStakes[idx]->rope = temp;
-				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx]->rope->index, allStakes[idx2]->index, allStakes[idx]->index);
-				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx2]->rope->index, allStakes[idx]->index, allStakes[idx2]->index);
-				lock_release(allStakes[idx]->rope->rope_lock);
-				lock_release(allStakes[idx2]->rope->rope_lock);
-				lock_release(fk_lock);
-				thread_yield();
-				goto start;
+							
+finish:				lock_acquire(fk_lock_2);
+					flowerkiller_done++;	
+					lock_release(fk_lock_2);
+					kprintf("incremented done counter %d\n", flowerkiller_done);
+			
+					if(flowerkiller_done == N_LORD_FLOWERKILLER){
+					kprintf("Lord FlowerKiller thread done\n");
+					}
 
-}				
-done:		lock_acquire(fk_lock);
-			flowerkiller_done += 1;
-			if(flowerkiller_done == N_LORD_FLOWERKILLER){
-				kprintf("Lord FlowerKiller thread done\n");
-			}
-			lock_release(fk_lock);
-
-			thread_exit();	
+					thread_exit();
 
 }
 
@@ -252,11 +268,13 @@ balloon(void *p, unsigned long arg)
 
 	kprintf("Balloon thread starting\n");
 	
-	while(dandelion_done + marigold_done + flowerkiller_done != 2 + N_LORD_FLOWERKILLER){
+	while((dandelion_done + marigold_done) != 2){
 		thread_yield();
 	}
-		
+	kprintf("Balloon freed and Prince Dandelion escapes!\n");		
 	
+	kprintf("Lord FlowerKiller thread done\n");
+
 	lock_acquire(nropes_lock);	
 	cv_signal(nropes_cv, nropes_lock);
 	lock_release(nropes_lock);
@@ -272,11 +290,15 @@ int
 airballoon(int nargs, char **args)
 {
 
-	int err = 0 , i;
+	int err = 0, i;
 
 	(void)nargs;
 	(void)args;
 	(void)ropes_left;
+	marigold_done = 0;
+	dandelion_done = 0;
+	ropes_left = NROPES;
+	flowerkiller_done = 0;
 	nropes_cv = cv_create("nropes");
 	if(nropes_cv == NULL){
 		goto panic;
@@ -294,6 +316,11 @@ airballoon(int nargs, char **args)
 
 	fk_lock_2 = lock_create("");
 	if(fk_lock_2 == NULL){
+		goto panic;
+	}
+
+	done_lock = lock_create("done_lk");
+	if(done_lock ==NULL){
 		goto panic;
 	}
 
@@ -342,17 +369,18 @@ panic:
 	      strerror(err));
 
 done:
+	
 	cv_destroy(nropes_cv);	
 	lock_destroy(nropes_lock);
 	lock_destroy(fk_lock_2);
 	cv_destroy(fk_cv);
 	lock_destroy(fk_lock);
+	lock_destroy(done_lock);
 	for(int i = 0; i <NROPES; i++)
-	{
+	{	
+		allStakes[i]->rope->rope_lock->holder = NULL;
 		stake_destroy(allStakes[i]);
-		allRopes[i] = NULL;
 	}
 	kprintf("Main thread done\n");
-	
 	return 0;
 }
