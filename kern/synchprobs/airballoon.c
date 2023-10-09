@@ -218,13 +218,8 @@ next:			if(ropes_left <  2){
 					lock_release(fk_lock);
 					goto finish;
 				}
-			//	while(1){
-				
 				idx2 = random() % (NROPES);
-			//	if(idx2 < idx1 || idx2 == idx1) break;
-				//KASSERT(idx2 < idx1 || idx2 == idx1);
-			//	}
-				if(idx2 == idx1 || idx2 < idx1) goto next;
+				if(idx2 == idx1) goto next;
 
 				lock_acquire(allStakes[idx2]->rope->rope_lock);
 				if(allStakes[idx2]->rope->is_severed){
@@ -239,10 +234,15 @@ next:			if(ropes_left <  2){
 					allStakes[idx1]->rope = temp;
 					temp = NULL;
 					//kprintf("pointers swapped %d %d \n", idx1, idx2);
-					//lock_release(fk_lock);		
+					lock_release(fk_lock);
+					if(idx2 > idx1){
 					lock_release(allStakes[idx1]->rope->rope_lock);
 					lock_release(allStakes[idx2]->rope->rope_lock);
-					lock_release(fk_lock);
+					} else {
+					lock_release(allStakes[idx2]->rope->rope_lock);
+					lock_release(allStakes[idx1]->rope->rope_lock);
+					}
+				//	lock_release(fk_lock);
 				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx1]->rope->index, allStakes[idx2]->index, allStakes[idx1]->index);
 				kprintf("Lord FlowerKiller has switched rope %d from stake %d to stake %d\n", allStakes[idx2]->rope->index, allStakes[idx1]->index, allStakes[idx2]->index);		
 				
