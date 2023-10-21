@@ -48,11 +48,30 @@
 #include <current.h>
 #include <addrspace.h>
 #include <vnode.h>
-
+#include <synch.h>
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
+
+struct file_info *fd_create(void){
+
+	struct file_info *fd = (struct file_info*)kmalloc(sizeof(struct file_info));
+	if(fd == NULL){
+		return NULL;
+	}
+
+	fd->file = NULL;
+	fd->offset = 0;
+	fd->status_flag = -1;
+
+	return fd;
+}
+
+void fd_destroy(struct file_info *fd){
+	KASSERT(fd != NULL);
+	kfree(fd);
+}
 
 /*
  * Create a proc structure.
@@ -81,6 +100,16 @@ proc_create(const char *name)
 
 	/* VFS fields */
 	proc->p_cwd = NULL;
+	
+	proc->fd_lock = lock_create("proc lock");
+	if(proc->fd_lock == NULL){
+		return NULL;
+	}
+
+	for(int i = 0; i < __OPEN_MAX; i++){
+		proc->fd[i] = fd_create();
+		if(proc->fd[i] == NULL) return NULL;
+	}
 
 	return proc;
 }
@@ -167,6 +196,12 @@ proc_destroy(struct proc *proc)
 
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
+	
+	lock_destroy(proc->fd_lock);
+
+	for(int i = 0; i < __OPEN_MAX; i++){
+		fd_destroy(proc->fd[i]);
+	}
 
 	kfree(proc->p_name);
 	kfree(proc);
