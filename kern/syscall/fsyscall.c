@@ -93,14 +93,14 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 
 	lock_acquire(curproc->fd_lock);
 
-		if(fd > (__OPEN_MAX -1) || (fd < 3)) return EBADF;
-		if(curproc->fd[fd]->file == NULL) return EBADF;
+		if(fd > (__OPEN_MAX -1) || (fd < 0)) return -1; //EBADF
+		if(curproc->fd[fd]->file == NULL) return -1;
 		
 		int CHECK_RD, CHECK_RDW;
 		CHECK_RD = curproc->fd[fd]->status_flag & O_RDONLY;
 		CHECK_RDW = curproc->fd[fd]->status_flag & O_RDWR;
 
-		if(!(CHECK_RD == O_RDONLY || CHECK_RDW == O_RDWR)) return EINVAL;
+		if(!(CHECK_RD == O_RDONLY || CHECK_RDW == O_RDWR)) return -1; //EINVAL
 
 		struct uio read_uio;
 		struct iovec read_iov;
@@ -114,7 +114,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		if(result){
 			kfree(proc_buf);
 			lock_release(curproc->fd_lock);
-			return result;
+			return -1;
 		}
 
 		curproc->fd[fd]->offset = read_uio.uio_offset;
@@ -123,7 +123,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		if(result){
 			kfree(proc_buf);
 	        lock_release(curproc->fd_lock);
-			return result;
+			return -1;
 		}
 
 		bytes_read = buflen - read_uio.uio_resid;
@@ -137,15 +137,15 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 	
 	lock_acquire(curproc->fd_lock);
-	if(fd > (__OPEN_MAX -1) || (fd < 3)) return EBADF;
- 	if(curproc->fd[fd]->file == NULL) return EBADF;
+	if(fd > (__OPEN_MAX -1) || (fd < 0)) return -1; //EBADF
+ 	if(curproc->fd[fd]->file == NULL) return -1;
 	
 	int CHECK_WR, CHECK_RDW;
 
 	CHECK_WR = curproc->fd[fd]->status_flag & O_WRONLY;
 	CHECK_RDW = curproc->fd[fd]->status_flag & O_RDWR;
 
-	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)) return EINVAL;
+	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)) return -1; //EINVAL
 
 	struct uio write_uio;
  	struct iovec write_iov;
@@ -158,7 +158,7 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
         if(result){
 			kfree(proc_buf);
 			lock_release(curproc->fd_lock);
-			return result;
+			return -1;
 		}
 
 		uio_kinit(&write_iov, &write_uio, (void*)proc_buf, nbytes, curproc->fd[fd]->offset, UIO_WRITE);
@@ -167,7 +167,7 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 		if(result){
 			kfree(proc_buf);
 			lock_release(curproc->fd_lock);
-			return result;
+			return -1;
 		}
 
 	curproc->fd[fd]->offset = write_uio.uio_offset;
