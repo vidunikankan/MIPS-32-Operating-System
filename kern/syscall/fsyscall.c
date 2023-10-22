@@ -13,7 +13,7 @@
 #include <uio.h>
 #include <kern/fcntl.h>
 
-int open(userptr_t user_pathname, int user_flag)
+int sys_open(userptr_t user_pathname, int user_flag)
 {
 	char *pathname;
 	int result;
@@ -26,46 +26,54 @@ int open(userptr_t user_pathname, int user_flag)
 	if(result){
 		
 		kfree(pathname);
-		return result;
+		return -1;
 	}
 
 	mode_t dummy_mode = 0;
-	struct vnode *dummy_file = NULL;
+	struct vnode *dummy_file;
+
 	
 	//Think about case where vfs_open returns, but the index finder fails. Would this affect file?
-	result = vfs_open(pathname, user_flag, dummy_mode, &dummy_file);
-	if(result){
 	
-		kfree(pathname);
-		return result;
-	}
 	
 	lock_acquire(curproc->fd_lock);
+	
 	for(int i = 3; i < __OPEN_MAX; i++){
 		if(curproc->fd[i]->file == NULL){
 			index = i;
 			break;
 		}
 	}
+	
 	if(index == 0){
 
 		kfree(pathname);
 		lock_release(curproc->fd_lock);	
 		return -1;
 	}
-	
+
+	result = vfs_open(pathname, user_flag, dummy_mode, &dummy_file);
+	if(result){
+         
+          kfree(pathname);
+          lock_release(curproc->fd_lock);
+		  return -1;
+ 	}
+
+
 	curproc->fd[index]->status_flag = user_flag;
 	curproc->fd[index]->file = dummy_file;
 	lock_release(curproc->fd_lock);
 	
 	kfree(pathname);
+	
 
-	return result;
+	return index;
 }
 
 
-int close(int user_fd){
-	if((user_fd < -1) || (user_fd >__OPEN_MAX - 1)){
+int sys_close(int user_fd){
+	if((user_fd < 3) || (user_fd >__OPEN_MAX - 1)){
 		return EBADF;
 	}
 
@@ -79,13 +87,13 @@ int close(int user_fd){
 	return 0;
 }
 
-size_t read(int fd, void *user_buf, size_t buflen){
+size_t sys_read(int fd, void *user_buf, size_t buflen){
 	
 //TODO: Add individual fd locks to file_info struct
 
 	lock_acquire(curproc->fd_lock);
 
-		if(fd > (__OPEN_MAX -1) || (fd < 0)) return EBADF;
+		if(fd > (__OPEN_MAX -1) || (fd < 3)) return EBADF;
 		if(curproc->fd[fd]->file == NULL) return EBADF;
 		
 		int CHECK_RD, CHECK_RDW;
@@ -126,10 +134,10 @@ size_t read(int fd, void *user_buf, size_t buflen){
 
 
 
-size_t write(int fd, const void* user_buf, size_t nbytes){
+size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 	
 	lock_acquire(curproc->fd_lock);
-	if(fd > (__OPEN_MAX -1) || (fd < 0)) return EBADF;
+	if(fd > (__OPEN_MAX -1) || (fd < 3)) return EBADF;
  	if(curproc->fd[fd]->file == NULL) return EBADF;
 	
 	int CHECK_WR, CHECK_RDW;
