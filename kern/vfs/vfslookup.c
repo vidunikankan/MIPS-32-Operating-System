@@ -280,9 +280,11 @@ vfs_lookup(char *path, struct vnode **retval)
 		vfs_biglock_release();
 		return 0;
 	}
-
+	
+	//startvn->vn_ops->vnode_check(startvn, path);
+	//result = startvn->vn_ops->vnode_lookup(startvn, path, retval);
 	result = VOP_LOOKUP(startvn, path, retval);
-
+	//VOP_LOOKUP(startvn, path, retval);
 	VOP_DECREF(startvn);
 	vfs_biglock_release();
 	return result;

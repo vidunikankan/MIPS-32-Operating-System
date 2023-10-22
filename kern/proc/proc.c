@@ -238,7 +238,9 @@ proc_create_runprogram(const char *name)
 	struct vnode *err;
 	//mode_t dummy_mode = 0;
 	int result;
-	char arg[__PATH_MAX + 1] = "con:\0";
+	char arg[__PATH_MAX + 1] = "con:";
+	char arg2[__PATH_MAX + 1] = "con:";	
+	char arg3[__PATH_MAX + 1] = "con:";
 
 	newproc = proc_create(name);
 	if (newproc == NULL) {
@@ -257,14 +259,14 @@ proc_create_runprogram(const char *name)
 	newproc->fd[STDIN_FILENO]->file  = in;
 	newproc->fd[STDIN_FILENO]->status_flag = O_RDONLY;
 	
-	result = vfs_open(arg, O_WRONLY, 0664, &out);
+	result = vfs_open(arg2, O_WRONLY, 0664, &out);
 	if(result){
 		return NULL;
 	}
 	newproc->fd[STDOUT_FILENO]->file = out;
 	newproc->fd[STDOUT_FILENO]->status_flag = O_WRONLY;
 
-	result = vfs_open(arg, O_WRONLY, 0664, &err);
+	result = vfs_open(arg3, O_WRONLY, 0664, &err);
 	if(result){
 		return NULL;
 	}

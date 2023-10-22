@@ -666,7 +666,7 @@ menu_execute(char *line, int isargs)
 {
 	char *command;
 	char *context;
-	int result;
+	int result = 1;
 
 	for (command = strtok_r(line, ";", &context);
 	     command != NULL;
@@ -675,8 +675,15 @@ menu_execute(char *line, int isargs)
 		if (isargs) {
 			kprintf("OS/161 kernel: %s\n", command);
 		}
+	
 
-		result = cmd_dispatch(command);
+			result = cmd_dispatch(command);
+			int i = 1;
+			while(i){
+				i = 1;
+				
+			}
+
 		if (result) {
 			kprintf("Menu command failed: %s\n", strerror(result));
 			if (isargs) {

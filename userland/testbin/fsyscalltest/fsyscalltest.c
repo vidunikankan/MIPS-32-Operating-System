@@ -37,10 +37,10 @@ simple_test()
 		err(1, "%s: open for write", file);
 	}
 
-	/*rv = write(fd, writebuf, 40);
+	rv = write(fd, writebuf, 40);
 	if (rv<0) {
 		err(1, "%s: write", file);
-	}*/
+	}
 
 	rv = close(fd);
 	if (rv<0) {
@@ -52,10 +52,10 @@ simple_test()
 		err(1, "%s: open for read", file);
 	}
 
-	/*rv = read(fd, readbuf, 40);
+	rv = read(fd, readbuf, 40);
 	if (rv<0) {
 		err(1, "%s: read", file);
-	}*/
+	}
 	rv = close(fd);
 	if (rv<0) {
 		err(1, "%s: close (2nd time)", file);

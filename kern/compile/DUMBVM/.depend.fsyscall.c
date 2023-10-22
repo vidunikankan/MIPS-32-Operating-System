@@ -11,4 +11,6 @@ fsyscall.o: ../../syscall/fsyscall.c ../../include/types.h \
  ../../include/array.h ../../include/lib.h opt-noasserts.h \
  ../../include/threadlist.h includelinks/machine/thread.h \
  ../../include/setjmp.h includelinks/kern/machine/setjmp.h \
- ../../include/proc.h ../../include/vfs.h ../../include/kern/errno.h
+ ../../include/proc.h ../../include/vfs.h ../../include/kern/errno.h \
+ ../../include/uio.h ../../include/kern/iovec.h \
+ ../../include/kern/fcntl.h
