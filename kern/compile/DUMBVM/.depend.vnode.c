@@ -4,4 +4,4 @@ vnode.o: ../../vfs/vnode.c ../../include/types.h \
  ../../include/lib.h ../../include/cdefs.h opt-noasserts.h \
  ../../include/synch.h ../../include/spinlock.h \
  includelinks/machine/spinlock.h ../../include/vfs.h \
- ../../include/array.h ../../include/vnode.h
+ ../../include/array.h ../../include/vnode.h ../../include/device.h

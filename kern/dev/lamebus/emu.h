@@ -57,6 +57,4 @@ struct emu_softc {
 
 /* Functions called by lower-level drivers */
 void emu_irq(/*struct emu_softc*/ void *);
-
-
 #endif /* _LAMEBUS_EMU_H_ */

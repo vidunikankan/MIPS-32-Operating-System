@@ -301,7 +301,6 @@ dev_namefile(struct vnode *v, struct uio *uio)
  *
  * However, we have no support for this in the base system.
  */
-static
 int
 dev_lookup(struct vnode *dir,
 	   char *pathname, struct vnode **result)

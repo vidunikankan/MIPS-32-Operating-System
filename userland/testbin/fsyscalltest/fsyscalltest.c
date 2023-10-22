@@ -9,13 +9,11 @@
  *
  * Much of the code is borrowed from filetest.c
  */
-
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <err.h>
 #include <limits.h>
-
 /* 
  * This is essentially the same code as in filetest.c, except we don't
  * expect any arguments, so the test can be executed before processes are

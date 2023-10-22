@@ -49,6 +49,9 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <synch.h>
+#include <kern/unistd.h>
+#include <kern/fcntl.h>
+#include <vfs.h>
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
@@ -217,6 +220,7 @@ proc_bootstrap(void)
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+
 }
 
 /*
@@ -229,6 +233,12 @@ struct proc *
 proc_create_runprogram(const char *name)
 {
 	struct proc *newproc;
+	struct vnode *in;
+	struct vnode *out;
+	struct vnode *err;
+	//mode_t dummy_mode = 0;
+	int result;
+	char arg[__PATH_MAX + 1] = "con:\0";
 
 	newproc = proc_create(name);
 	if (newproc == NULL) {
@@ -240,7 +250,27 @@ proc_create_runprogram(const char *name)
 	newproc->p_addrspace = NULL;
 
 	/* VFS fields */
+	result = vfs_open(arg, O_RDONLY, 0664, &in); 
+	if(result){
+		return NULL;
+	}
+	newproc->fd[STDIN_FILENO]->file  = in;
+	newproc->fd[STDIN_FILENO]->status_flag = O_RDONLY;
+	
+	result = vfs_open(arg, O_WRONLY, 0664, &out);
+	if(result){
+		return NULL;
+	}
+	newproc->fd[STDOUT_FILENO]->file = out;
+	newproc->fd[STDOUT_FILENO]->status_flag = O_WRONLY;
 
+	result = vfs_open(arg, O_WRONLY, 0664, &err);
+	if(result){
+		return NULL;
+	}
+	newproc->fd[STDERR_FILENO]->file = err;
+	newproc->fd[STDERR_FILENO]->status_flag = O_WRONLY;
+	
 	/*
 	 * Lock the current process to copy its current directory.
 	 * (We don't need to lock the new process, though, as we have

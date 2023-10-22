@@ -10,4 +10,7 @@ trap.o: ../../arch/mips/locore/trap.c ../../include/types.h \
  ../../include/array.h includelinks/machine/thread.h \
  ../../include/setjmp.h includelinks/kern/machine/setjmp.h \
  ../../include/current.h includelinks/machine/current.h \
- ../../include/vm.h ../../include/mainbus.h ../../include/syscall.h
+ ../../include/vm.h ../../include/mainbus.h ../../include/syscall.h \
+ ../../include/kern/fsyscall.h ../../include/clock.h \
+ ../../include/kern/time.h opt-synchprobs.h ../../include/copyinout.h \
+ ../../include/limits.h ../../include/kern/limits.h

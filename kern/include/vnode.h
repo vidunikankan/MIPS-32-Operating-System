@@ -249,6 +249,9 @@ struct vnode_ops {
 #define VOP_RMDIR(vn, name)             (__VOP(vn, rmdir)(vn, name))
 #define VOP_RENAME(vn1,name1,vn2,name2)(__VOP(vn1,rename)(vn1,name1,vn2,name2))
 
+
+int vnode_lookup(struct vnode *, char *, struct vnode **);
+
 #define VOP_LOOKUP(vn, name, res)       (__VOP(vn, lookup)(vn, name, res))
 #define VOP_LOOKPARENT(vn,nm,res,bf,ln) (__VOP(vn,lookparent)(vn,nm,res,bf,ln))
 

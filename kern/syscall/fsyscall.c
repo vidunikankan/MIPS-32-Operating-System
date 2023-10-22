@@ -39,7 +39,7 @@ int open(userptr_t user_pathname, int user_flag)
 	}
 	
 	lock_acquire(curproc->fd_lock);
-	for(int i = 2; i < __OPEN_MAX; i++){
+	for(int i = 3; i < __OPEN_MAX; i++){
 		if(curproc->fd[i]->file == NULL){
 			index = i;
 			break;

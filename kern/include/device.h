@@ -81,5 +81,7 @@ void devnull_create(void);
 /* Function that kicks off device probe and attach. */
 void dev_bootstrap(void);
 
+int dev_lookup(struct vnode *dir,
+        char *pathname, struct vnode **result);
 
-#endif /* _DEVICE_H_ */
+#endif

@@ -36,7 +36,7 @@
 #include <synch.h>
 #include <vfs.h>
 #include <vnode.h>
-
+#include <device.h>
 /*
  * Initialize an abstract vnode.
  */
@@ -175,3 +175,14 @@ vnode_check(struct vnode *v, const char *opstr)
 	spinlock_release(&v->vn_countlock);
 	vfs_biglock_release();
 }
+
+int
+vnode_lookup(struct vnode *dir, char *pathname, struct vnode **ret)
+  {
+	int result;
+	result = dev_lookup(dir, pathname, ret);
+
+ 	return result;
+ }
+ 
+
