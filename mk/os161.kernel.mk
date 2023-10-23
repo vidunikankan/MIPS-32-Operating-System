@@ -21,7 +21,6 @@
 #
 # Additional defs for building a kernel.
 #
-HOME=/ubc/ece/home/ugrads/v/vidunik
 OSTREE=$(HOME)/os161/root
 # All sources.
 ALLSRCS=$(SRCS) $(SRCS.MACHINE.$(MACHINE)) $(SRCS.PLATFORM.$(PLATFORM))
