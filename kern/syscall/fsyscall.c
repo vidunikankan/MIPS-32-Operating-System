@@ -44,29 +44,29 @@ int sys_open(userptr_t user_pathname, int user_flag)
 			break;
 		}
 	}
-	
+	lock_release(curproc->fd_lock);
+
 	if(index == 0){
 
 		kfree(pathname);
-		lock_release(curproc->fd_lock);	
 		return -1;
 	}
-
+	
+	lock_acquire(curproc->fd[index]->fd_lock);
 	result = vfs_open(pathname, user_flag, dummy_mode, &dummy_file);
 	if(result){
          
           kfree(pathname);
-          lock_release(curproc->fd_lock);
+		  lock_release(curproc->fd[index]->fd_lock);
 		  return -1;
  	}
 
 
 	curproc->fd[index]->status_flag = user_flag;
 	curproc->fd[index]->file = dummy_file;
-	lock_release(curproc->fd_lock);
 	
 	kfree(pathname);
-	
+	lock_release(curproc->fd[index]->fd_lock);
 
 	return index;
 }
@@ -77,12 +77,12 @@ int sys_close(int user_fd){
 		return EBADF;
 	}
 
-	lock_acquire(curproc->fd_lock);
+	lock_acquire(curproc->fd[user_fd]->fd_lock);
 	vfs_close(curproc->fd[user_fd]->file);
 	curproc->fd[user_fd]->file = NULL;
 	curproc->fd[user_fd]->offset =0;
 	curproc->fd[user_fd]->status_flag =-1;
-	lock_release(curproc->fd_lock);
+	lock_release(curproc->fd[user_fd]->fd_lock);
 	
 	return 0;
 }
@@ -90,12 +90,21 @@ int sys_close(int user_fd){
 size_t sys_read(int fd, void *user_buf, size_t buflen){
 	
 //TODO: Add individual fd locks to file_info struct
-
+	size_t bytes_read = -1;
 	lock_acquire(curproc->fd_lock);
 
-		if(fd > (__OPEN_MAX -1) || (fd < 0)) return -1; //EBADF
-		if(curproc->fd[fd]->file == NULL) return -1;
+		if(fd > (__OPEN_MAX -1) || (fd < 0)){
+			lock_release(curproc->fd_lock);
+			return -1; //EBADF
+		}
+		if(curproc->fd[fd]->file == NULL){
+			lock_release(curproc->fd_lock);
+			return -1;
+ 		}
+	lock_release(curproc->fd_lock);
+
 		
+		lock_acquire(curproc->fd[fd]->fd_lock);
 		int CHECK_RD, CHECK_RDW;
 		CHECK_RD = curproc->fd[fd]->status_flag & O_RDONLY;
 		CHECK_RDW = curproc->fd[fd]->status_flag & O_RDWR;
@@ -105,7 +114,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		struct uio read_uio;
 		struct iovec read_iov;
 		int result;
-		size_t bytes_read;
+		bytes_read = 0;
 		char *proc_buf = (char*)kmalloc(sizeof(char)*buflen);
 		
 		uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
@@ -113,7 +122,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 
 		if(result){
 			kfree(proc_buf);
-			lock_release(curproc->fd_lock);
+			lock_release(curproc->fd[fd]->fd_lock);
 			return -1;
 		}
 
@@ -122,13 +131,13 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		result = copyout((const void*)proc_buf, (userptr_t)user_buf, buflen);
 		if(result){
 			kfree(proc_buf);
-	        lock_release(curproc->fd_lock);
+	        lock_release(curproc->fd[fd]->fd_lock);
 			return -1;
 		}
 
 		bytes_read = buflen - read_uio.uio_resid;
 		kfree(proc_buf);
-		lock_release(curproc->fd_lock);
+		lock_release(curproc->fd[fd]->fd_lock);
 		return bytes_read;
 
 }
@@ -138,15 +147,26 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 	
 	lock_acquire(curproc->fd_lock);
-	if(fd > (__OPEN_MAX -1) || (fd < 0)) return -1; //EBADF
- 	if(curproc->fd[fd]->file == NULL) return -1;
+	if(fd > (__OPEN_MAX -1) || (fd < 0)){
+		lock_release(curproc->fd_lock);
+		return -1; //EBADF
+	}
+ 	if(curproc->fd[fd]->file == NULL){
+		lock_release(curproc->fd_lock);
+		return -1;
+	}
+	lock_release(curproc->fd_lock);
 	
+	lock_acquire(curproc->fd[fd]->fd_lock);
 	int CHECK_WR, CHECK_RDW;
 
 	CHECK_WR = curproc->fd[fd]->status_flag & O_WRONLY;
 	CHECK_RDW = curproc->fd[fd]->status_flag & O_RDWR;
 
-	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)) return -1; //EINVAL
+	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)){
+		lock_release(curproc->fd[fd]->fd_lock);
+		return -1; //EINVAL	
+	}
 
 	struct uio write_uio;
  	struct iovec write_iov;
@@ -162,19 +182,32 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 	
 		if(result){
 			kfree(proc_buf);
-			lock_release(curproc->fd_lock);
+			lock_release(curproc->fd[fd]->fd_lock);
 			return -1;
 		}
 
 	curproc->fd[fd]->offset = write_uio.uio_offset;
 	bytes_written = nbytes - write_uio.uio_resid;
 	kfree(proc_buf);
-	lock_release(curproc->fd_lock);
+	lock_release(curproc->fd[fd]->fd_lock);
 
 	return bytes_written;
 
 }
 
+/*off_t sys_lseek(int fd, off_t pos, int whence){
+	int check;	
+
+	check = VOP_ISSEEKABLE
+
+
+
+
+
+
+
+
+}*/
 
 
 		

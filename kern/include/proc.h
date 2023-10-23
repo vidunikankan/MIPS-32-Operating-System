@@ -47,6 +47,7 @@ struct vnode;
  */
 struct file_info {
 	struct vnode * file;
+	struct lock *fd_lock;
 	int status_flag;
 	size_t offset;
 };

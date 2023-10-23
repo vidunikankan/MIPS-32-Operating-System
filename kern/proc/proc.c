@@ -63,7 +63,11 @@ struct file_info *fd_create(void){
 	if(fd == NULL){
 		return NULL;
 	}
-
+	struct lock *lock = lock_create("fd lock");
+	if(lock == NULL){
+		return NULL;
+	}
+	fd->fd_lock = lock;
 	fd->file = NULL;
 	fd->offset = 0;
 	fd->status_flag = -1;
@@ -73,6 +77,7 @@ struct file_info *fd_create(void){
 
 void fd_destroy(struct file_info *fd){
 	KASSERT(fd != NULL);
+	lock_destroy(fd->fd_lock);
 	kfree(fd);
 }
 
