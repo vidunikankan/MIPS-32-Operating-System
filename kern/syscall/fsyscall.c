@@ -106,7 +106,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		struct iovec read_iov;
 		int result;
 		size_t bytes_read;
-		char *proc_buf = (char*)kmalloc(buflen);
+		char *proc_buf = (char*)kmalloc(sizeof(char)*buflen);
 		
 		uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
 		result = VOP_READ(curproc->fd[fd]->file, &read_uio);
@@ -128,6 +128,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 
 		bytes_read = buflen - read_uio.uio_resid;
 		kfree(proc_buf);
+		lock_release(curproc->fd_lock);
 		return bytes_read;
 
 }
@@ -152,14 +153,9 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 	int result;
 	size_t bytes_written;        
 	size_t bytes;
-	char *proc_buf = (char*)kmalloc(nbytes);
+	char *proc_buf = (char*)kmalloc(sizeof(char)*nbytes);
 		
-		result = copyinstr((userptr_t)user_buf, proc_buf, strlen(proc_buf), &bytes);
-        if(result){
-			kfree(proc_buf);
-			lock_release(curproc->fd_lock);
-			return -1;
-		}
+		result = copyinstr((userptr_t)user_buf, proc_buf, nbytes, &bytes);
 
 		uio_kinit(&write_iov, &write_uio, (void*)proc_buf, nbytes, curproc->fd[fd]->offset, UIO_WRITE);
 		result = VOP_WRITE(curproc->fd[fd]->file, &write_uio);

@@ -1,6 +1,4 @@
-/*
- * fsyscalltest.c
- *
+ /**
  * Tests file-related system calls open, close, read and write.
  *
  * Should run on emufs. This test allows testing the file-related system calls
@@ -171,10 +169,10 @@ test_openfile_limits()
 
 	file = "testfile1";
 
-	/* We should be allowed to open this file OPEN_MAX - 3 times, 
-	 * because the first 3 file descriptors are occupied by stdin, 
-	 * stdout and stderr. 
-	 */
+	// We should be allowed to open this file OPEN_MAX - 3 times, 
+	 // because the first 3 file descriptors are occupied by stdin, 
+	 //stdout and stderr. 
+	 
 	for(i = 0; i < (OPEN_MAX-3); i++)
 	{
 		fd = open(file, O_RDWR|O_CREAT|O_TRUNC, 0664);
@@ -185,14 +183,14 @@ test_openfile_limits()
 			err(1, "open for %s returned a reserved file descriptor",
 			    file);
 
-		/* We do not assume that the underlying system will return
-		 * file descriptors as consecutive numbers, so we just remember
-		 * all that were returned, so we can close them. 
-		 */
+		//We do not assume that the underlying system will return
+		 //file descriptors as consecutive numbers, so we just remember
+		 // all that were returned, so we can close them. 
+		 
 		openFDs[i] = fd;
 	}
 
-	/* This one should fail. */
+	// This one should fail. 
 	fd = open(file, O_RDWR|O_CREAT|O_TRUNC, 0664);
 	if(fd > 0)
 		err(1, "Opening file for %dth time should fail, as %d "
@@ -200,7 +198,7 @@ test_openfile_limits()
 		    "first three are reserved. \n",
 		    (i+1), OPEN_MAX);
 
-	/* Let's close one file and open another one, which should succeed. */
+	// Let's close one file and open another one, which should succeed. 
 	rv = close(openFDs[0]);
 	if (rv<0)
 		err(1, "%s: close for the 1st time", file);
@@ -213,9 +211,9 @@ test_openfile_limits()
 	if (rv<0)
 		err(1, "%s: close for the 2nd time", file);
 
-	/* Begin closing with index "1", because we already closed the one
-	 * at slot "0".
-	 */
+	// Begin closing with index "1", because we already closed the one
+	 // at slot "0".
+	 
 	for(i = 1; i < OPEN_MAX - 3; i++)
 	{
 		rv = close(openFDs[i]);
@@ -227,7 +225,6 @@ test_openfile_limits()
 // Open two files, write to them, read from them, make sure the
  // content checks, then close them. 
  
-
 /*static void
 simultaneous_write_test()
 {
