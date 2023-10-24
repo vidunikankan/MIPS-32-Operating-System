@@ -102,51 +102,59 @@ syscall(struct trapframe *tf)
 
 	switch (callno) {
 	    case SYS_reboot:
-		err = sys_reboot(tf->tf_a0);
-		break;
+			err = sys_reboot(tf->tf_a0);
+			break;
 
 	    case SYS___time:
-		err = sys___time((userptr_t)tf->tf_a0,
-				 (userptr_t)tf->tf_a1);
-		break;
+			err = sys___time((userptr_t)tf->tf_a0,
+			(userptr_t)tf->tf_a1);
+			break;
 
 		case SYS_open:
-		retval = sys_open((userptr_t)tf->tf_a0, (int)tf->tf_a1);
-		//TODO: Check if any error codes are within this range
-		err = 0;
-		if(retval < 0){
-			err = retval;
-		}
-		break;
+			retval = sys_open((userptr_t)tf->tf_a0, (int)tf->tf_a1);
+			//TODO: Check if any error codes are within this range
+			err = 0;
+			if(retval < 0){
+				err = retval;
+			}
+			break;
 
 		case SYS_close:
-		err = sys_close((int)tf->tf_a0);
-		break;
+			err = sys_close((int)tf->tf_a0);
+			break;
 
 		case SYS_read:
-		err = sys_read((int)tf->tf_a0,(void*)tf->tf_a1, (size_t)tf->tf_a2);
-		if(err > -1){
-			retval = err;
-			err = 0;
-		}
-		break;
+			err = sys_read((int)tf->tf_a0,(void*)tf->tf_a1, (size_t)tf->tf_a2);
+			if(err > -1){
+				retval = err;
+				err = 0;
+			}
+			break;
 
 		case SYS_write:
-		err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2);
-	    if(err > -1) err = 0;
-		break;
+			err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2);
+			if(err > -1) err = 0;
+			break;
 
-	case SYS_lseek: ;
-		int whence = 0;
-		copyin((const_userptr_t) tf->tf_sp + 16, &whence, sizeof(int));
-		off_t *pos = (off_t *) &tf->tf_a2;
-		err = sys_lseek((int) tf->tf_a0, *pos, whence, &retval, &retval2);
-		break;
+		case SYS_lseek: ;
+			int whence = 0;
+			copyin((const_userptr_t) tf->tf_sp + 16, &whence, sizeof(int));
+			off_t *pos = (off_t *) &tf->tf_a2;
+			err = sys_lseek((int) tf->tf_a0, *pos, whence, &retval, &retval2);
+			break;
+
+		case SYS_chdir:
+			err = sys_chdir((const char*) tf->tf_a0);
+			break;
+
+		case SYS___getcwd:
+			err = sys__getcwd((char*) tf->tf_a0, (size_t) tf->tf_a1, &retval);
+			break;
 
 		default:
-		kprintf("Unknown syscall %d\n", callno);
-		err = ENOSYS;
-		break;
+			kprintf("Unknown syscall %d\n", callno);
+			err = ENOSYS;
+			break;
 	}
 
 

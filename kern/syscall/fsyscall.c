@@ -205,39 +205,41 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 }
 
 int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
-	if (whence < 0 || whence > 2) {
-		return EINVAL;
-	}
+	if (whence < 0 || whence > 2) {return EINVAL;}
 
 	lock_acquire(curproc->fd_lock);
-		if(fd >= __OPEN_MAX || fd < 0){
-			lock_release(curproc->fd_lock);
-			return EBADF;
-		}
+	if(fd >= __OPEN_MAX || fd < 0){
+		lock_release(curproc->fd_lock);
+		return EBADF;
+	}
 
-		if(curproc->fd[fd]->file == NULL){
-			lock_release(curproc->fd_lock);
-			return EBADF;
- 		}
+	if(curproc->fd[fd]->file == NULL){
+		lock_release(curproc->fd_lock);
+		return EBADF;
+	}
 	lock_release(curproc->fd_lock);
 
 	struct file_info *fhandle = curproc->fd[fd];
 	lock_acquire(fhandle->fd_lock);
 
 	if (!VOP_ISSEEKABLE(fhandle->file)) {
-        	lock_release(fhandle->fd_lock);
-        	return ESPIPE;
-    	}
+		lock_release(fhandle->fd_lock);
+		return ESPIPE;
+    }
 
 	struct stat *ptr = kmalloc(sizeof(struct stat));
 
 	if (ptr == NULL) {
+		lock_release(fhandle->fd_lock);
+		kfree(ptr);
 		return ENOMEM;
 	 }
 
 	VOP_STAT(fhandle->file, ptr);
 	off_t size = ptr->st_size;
 	off_t new_offset = fhandle->offset;
+
+	kfree(ptr);
 
 	switch (whence) {
         case SEEK_SET:
@@ -259,13 +261,79 @@ int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
 	}
 
 	fhandle->offset = new_offset;
-	*retval = new_offset >> 32;
-    	*retval2 = new_offset & 0xFFFFFFFF;
+	*retval = (uint32_t) (new_offset >> 32);
+	*retval2 = (uint32_t) new_offset;
 
 	lock_release(fhandle->fd_lock);
 
 	return 0;
 }
+
+int sys_chdir(const char *pathname) {
+	char *path = kmalloc(PATH_MAX);
+	size_t len;
+	int err;
+
+	err = copyinstr((const_userptr_t) pathname, path, PATH_MAX, &len);
+
+	if (err) {
+		kfree(path);
+		return err;
+	}
+
+	err = vfs_chdir((char*) pathname);
+	kfree(path);
+
+	if (err) {return err;}
+
+	return 0;
+}
+
+int sys__getcwd(char *buf, size_t buflen, int32_t *retval) {
+	struct iovec cwd_iov;
+    struct uio cwd_u;
+	int err;
+
+	struct vnode *cwd = curproc->p_cwd;
+    if (cwd == NULL) {return ENOENT;}
+
+	cwd_iov.iov_ubase = (userptr_t)buf;
+    cwd_iov.iov_len = buflen;
+    cwd_u.uio_iov = &cwd_iov;
+    cwd_u.uio_iovcnt = 1;
+    cwd_u.uio_resid = buflen;
+    cwd_u.uio_offset = 0;
+    cwd_u.uio_segflg = UIO_USERSPACE;
+    cwd_u.uio_rw = UIO_READ;
+    cwd_u.uio_space = curproc->p_addrspace;
+
+	err = vfs_getcwd(&cwd_u);
+
+	if (err) {return err;}
+
+	err = copyout(buf, cwd_u.uio_iov->iov_ubase, cwd_u.uio_resid);
+    if (err) {return EFAULT;}
+
+	*retval = buflen - cwd_u.uio_resid;
+
+	return 0;
+}
+
+// int sys_dup2(int oldfd, int newfd, int32_t* retval) {
+	// if (newfd < 0 || oldfd < 0 || newfd >= OPEN_MAX || oldfd >= OPEN_MAX) {return EBADF;}
+
+	// lock_acquire(curproc->fd_lock);
+	// if(curproc->fd[oldfd]->file == NULL){
+	// 	lock_release(curproc->fd_lock);
+	// 	return EBADF;
+	// }
+	// lock_release(curproc->fd_lock);
+
+	// struct file_info *fhandle = curproc->fd[fd];
+
+
+// 	return 0;
+// }
 
 
 

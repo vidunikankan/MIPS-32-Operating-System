@@ -306,7 +306,7 @@ simultaneous_write_test()
 
 }
 
-/*static void
+static void
 _getcwd(char *buf, int len)
 {
 	int ret;
@@ -325,14 +325,14 @@ _getcwd(char *buf, int len)
 	// Ensure null termination.
 	buf[ret] = 0;
 
-}*/
+}
 
 /*
  * This test is really simple. We want it to run on emufs,
  * and we can't do more sophisticated things with directories
  * here.
  */
-/*static void
+static void
 dir_test()
 {
 	char chdir_name[] = "testbin";
@@ -347,7 +347,7 @@ dir_test()
 	{
 		err(1, "chdir into %s", chdir_name);
 	}
-}*/
+}
 
 
 /* This test takes no arguments, so we can run it before argument passing
@@ -368,8 +368,8 @@ main()
 	//test_dup2();
 	//printf("Passed Part 4 of fsyscalltest\n");
 
-	//dir_test();
-	//printf("Passed Part 5 of fsyscalltest\n");
+	dir_test();
+	printf("Passed Part 5 of fsyscalltest\n");
 
 	printf("All done!\n");
 
