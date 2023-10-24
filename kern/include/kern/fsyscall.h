@@ -6,11 +6,11 @@
 #include <current.h>
 
 
-int sys_open(userptr_t user_pathname, int user_flag);
+int sys_open(userptr_t user_pathname, int user_flag, int* retval);
 
 int sys_close(int user_fd);
 
-size_t sys_read(int, void *, size_t);
+int sys_read(int, void *, size_t, int *);
 
 size_t sys_write(int, const void*, size_t);
 

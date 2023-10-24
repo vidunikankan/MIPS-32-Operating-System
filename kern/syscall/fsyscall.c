@@ -15,7 +15,7 @@
 #include <stat.h>
 #include <kern/seek.h>
 
-int sys_open(userptr_t user_pathname, int user_flag)
+int sys_open(userptr_t user_pathname, int user_flag, int* retval)
 {
 	char *pathname;
 	int result;
@@ -28,7 +28,7 @@ int sys_open(userptr_t user_pathname, int user_flag)
 	if(result){
 
 		kfree(pathname);
-		return -1;
+		return result;
 	}
 
 	mode_t dummy_mode = 0;
@@ -51,7 +51,7 @@ int sys_open(userptr_t user_pathname, int user_flag)
 	if(index == 0){
 
 		kfree(pathname);
-		return -1;
+		return EMFILE;
 	}
 
 	lock_acquire(curproc->fd[index]->fd_lock);
@@ -60,7 +60,7 @@ int sys_open(userptr_t user_pathname, int user_flag)
 
           kfree(pathname);
 		  lock_release(curproc->fd[index]->fd_lock);
-		  return -1;
+		  return result;
  	}
 
 
@@ -69,8 +69,8 @@ int sys_open(userptr_t user_pathname, int user_flag)
 
 	kfree(pathname);
 	lock_release(curproc->fd[index]->fd_lock);
-
-	return index;
+	*retval = index;
+	return 0;
 }
 
 
@@ -96,29 +96,39 @@ int sys_close(int user_fd){
 	return 0;
 }
 
-size_t sys_read(int fd, void *user_buf, size_t buflen){
+int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 
 //TODO: Add individual fd locks to file_info struct
-	size_t bytes_read = -1;
+	int bytes_read = -1;
 	lock_acquire(curproc->fd_lock);
 
 		if(fd > (__OPEN_MAX -1) || (fd < 0)){
 			lock_release(curproc->fd_lock);
-			return -1; //EBADF
+			return EBADF; //EBADF
 		}
 		if(curproc->fd[fd]->file == NULL){
 			lock_release(curproc->fd_lock);
-			return -1;
+			return EBADF;
  		}
 	lock_release(curproc->fd_lock);
 
 
 		lock_acquire(curproc->fd[fd]->fd_lock);
-		int CHECK_RD, CHECK_RDW;
+		int CHECK_RD;
+		int CHECK_WR;
+		int CHECK_RDWR;
+		
+		CHECK_WR = curproc->fd[fd]->status_flag & O_WRONLY;
 		CHECK_RD = curproc->fd[fd]->status_flag & O_RDONLY;
-		CHECK_RDW = curproc->fd[fd]->status_flag & O_RDWR;
-
-		if(!(CHECK_RD == O_RDONLY || CHECK_RDW == O_RDWR)) return -1; //EINVAL
+		CHECK_RDWR = curproc->fd[fd]->status_flag & O_RDWR;
+		if(CHECK_WR == O_WRONLY){
+		lock_release(curproc->fd[fd]->fd_lock);
+		return EBADF; //EINVAL
+		}
+		if(!((CHECK_RD == O_RDONLY) || (CHECK_RDWR == O_RDWR))){
+		lock_release(curproc->fd[fd]->fd_lock);
+		return EINVAL;
+		}
 
 		struct uio read_uio;
 		struct iovec read_iov;
@@ -126,13 +136,24 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		bytes_read = 0;
 		char *proc_buf = (char*)kmalloc(sizeof(char)*buflen);
 
-		uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
+	uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
+	/*read_iov.iov_ubase = (void *)proc_buf;
+      read_iov.iov_len = buflen;
+      read_uio.uio_iov = &read_iov;
+      read_uio.uio_iovcnt = 1;
+      read_uio.uio_resid = buflen;
+      read_uio.uio_offset = 0;
+      read_uio.uio_segflg = UIO_USERSPACE;
+      read_uio.uio_rw = UIO_READ;
+      read_uio.uio_space = curproc->p_addrspace;
+*/
+
 		result = VOP_READ(curproc->fd[fd]->file, &read_uio);
 
 		if(result){
 			kfree(proc_buf);
 			lock_release(curproc->fd[fd]->fd_lock);
-			return -1;
+			return result;
 		}
 
 		curproc->fd[fd]->offset = read_uio.uio_offset;
@@ -141,13 +162,14 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		if(result){
 			kfree(proc_buf);
 	        lock_release(curproc->fd[fd]->fd_lock);
-			return -1;
+			return result;
 		}
 
 		bytes_read = buflen - read_uio.uio_resid;
 		kfree(proc_buf);
 		lock_release(curproc->fd[fd]->fd_lock);
-		return bytes_read;
+		*retval = bytes_read;
+		return 0;
 
 }
 
@@ -187,6 +209,16 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 		result = copyinstr((userptr_t)user_buf, proc_buf, nbytes, &bytes);
 
 		uio_kinit(&write_iov, &write_uio, (void*)proc_buf, nbytes, curproc->fd[fd]->offset, UIO_WRITE);
+	/*write_iov.iov_ubase = (void*)proc_buf;
+     write_iov.iov_len = nbytes;
+     write_uio.uio_iov = &write_iov;
+     write_uio.uio_iovcnt = 1;
+     write_uio.uio_resid = nbytes;
+     write_uio.uio_offset = 0;
+     write_uio.uio_segflg = UIO_USERSPACE;
+	 write_uio.uio_rw = UIO_WRITE;
+     write_uio.uio_space = curproc->p_addrspace;
+*/
 		result = VOP_WRITE(curproc->fd[fd]->file, &write_uio);
 
 		if(result){
