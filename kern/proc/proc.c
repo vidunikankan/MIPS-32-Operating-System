@@ -71,6 +71,7 @@ struct file_info *fd_create(void){
 	fd->file = NULL;
 	fd->offset = 0;
 	fd->status_flag = -1;
+	fd->ref_count = 0;
 
 	return fd;
 }
@@ -108,7 +109,7 @@ proc_create(const char *name)
 
 	/* VFS fields */
 	proc->p_cwd = NULL;
-	
+
 	proc->fd_lock = lock_create("proc lock");
 	if(proc->fd_lock == NULL){
 		return NULL;
@@ -204,7 +205,7 @@ proc_destroy(struct proc *proc)
 
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
-	
+
 	lock_destroy(proc->fd_lock);
 
 	for(int i = 0; i < __OPEN_MAX; i++){
@@ -244,7 +245,7 @@ proc_create_runprogram(const char *name)
 	//mode_t dummy_mode = 0;
 	int result;
 	char arg[__PATH_MAX + 1] = "con:";
-	char arg2[__PATH_MAX + 1] = "con:";	
+	char arg2[__PATH_MAX + 1] = "con:";
 	char arg3[__PATH_MAX + 1] = "con:";
 
 	newproc = proc_create(name);
@@ -257,13 +258,13 @@ proc_create_runprogram(const char *name)
 	newproc->p_addrspace = NULL;
 
 	/* VFS fields */
-	result = vfs_open(arg, O_RDONLY, 0664, &in); 
+	result = vfs_open(arg, O_RDONLY, 0664, &in);
 	if(result){
 		return NULL;
 	}
 	newproc->fd[STDIN_FILENO]->file  = in;
 	newproc->fd[STDIN_FILENO]->status_flag = O_RDONLY;
-	
+
 	result = vfs_open(arg2, O_WRONLY, 0664, &out);
 	if(result){
 		return NULL;
@@ -277,7 +278,7 @@ proc_create_runprogram(const char *name)
 	}
 	newproc->fd[STDERR_FILENO]->file = err;
 	newproc->fd[STDERR_FILENO]->status_flag = O_WRONLY;
-	
+
 	/*
 	 * Lock the current process to copy its current directory.
 	 * (We don't need to lock the new process, though, as we have

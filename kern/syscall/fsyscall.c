@@ -66,6 +66,7 @@ int sys_open(userptr_t user_pathname, int user_flag, int* retval)
 
 	curproc->fd[index]->status_flag = user_flag;
 	curproc->fd[index]->file = dummy_file;
+	curproc->fd[index]->ref_count = 1;
 
 	kfree(pathname);
 	lock_release(curproc->fd[index]->fd_lock);
@@ -87,12 +88,13 @@ int sys_close(int user_fd){
 	lock_release(curproc->fd_lock);
 
 	lock_acquire(curproc->fd[user_fd]->fd_lock);
-	vfs_close(curproc->fd[user_fd]->file);
+	if (--(curproc->fd[user_fd]->ref_count) == 0) {
+		vfs_close(curproc->fd[user_fd]->file);
+	}
 	curproc->fd[user_fd]->file = NULL;
 	curproc->fd[user_fd]->offset =0;
 	curproc->fd[user_fd]->status_flag =-1;
 	lock_release(curproc->fd[user_fd]->fd_lock);
-
 	return 0;
 }
 
@@ -340,7 +342,6 @@ int sys__getcwd(char *buf, size_t buflen, int32_t *retval) {
     cwd_u.uio_space = curproc->p_addrspace;
 
 	err = vfs_getcwd(&cwd_u);
-
 	if (err) {return err;}
 
 	err = copyout(buf, cwd_u.uio_iov->iov_ubase, cwd_u.uio_resid);
@@ -351,21 +352,35 @@ int sys__getcwd(char *buf, size_t buflen, int32_t *retval) {
 	return 0;
 }
 
-// int sys_dup2(int oldfd, int newfd, int32_t* retval) {
-	// if (newfd < 0 || oldfd < 0 || newfd >= OPEN_MAX || oldfd >= OPEN_MAX) {return EBADF;}
+int sys_dup2(int oldfd, int newfd, int32_t* retval) {
+	if (newfd < 0 || oldfd < 0 || newfd >= OPEN_MAX || oldfd >= OPEN_MAX) {return EBADF;}
 
-	// lock_acquire(curproc->fd_lock);
-	// if(curproc->fd[oldfd]->file == NULL){
-	// 	lock_release(curproc->fd_lock);
-	// 	return EBADF;
-	// }
-	// lock_release(curproc->fd_lock);
+	lock_acquire(curproc->fd_lock);
+	if(curproc->fd[oldfd]->file == NULL){
+		lock_release(curproc->fd_lock);
+		return EBADF;
+	}
+	lock_release(curproc->fd_lock);
 
-	// struct file_info *fhandle = curproc->fd[fd];
+	struct file_info *old = curproc->fd[oldfd];
+	struct file_info *new = curproc->fd[newfd];
 
+	lock_acquire(old->fd_lock);
+	if (old == new) {return 0;}
 
-// 	return 0;
-// }
+	if(curproc->fd[newfd]->file != NULL){sys_close(newfd);}
+
+	lock_acquire(new->fd_lock);
+
+	curproc->fd[newfd] = curproc->fd[oldfd];
+	curproc->fd[oldfd]->ref_count++;
+
+	lock_release(new->fd_lock);
+	lock_release(old->fd_lock);
+
+	*retval = newfd;
+	return 0;
+}
 
 
 

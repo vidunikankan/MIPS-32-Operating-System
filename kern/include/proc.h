@@ -50,6 +50,7 @@ struct file_info {
 	struct lock *fd_lock;
 	int status_flag;
 	size_t offset;
+	int ref_count;
 };
 
 struct proc {
@@ -62,7 +63,7 @@ struct proc {
 
 	/* VFS */
 	struct vnode *p_cwd;		/* current working directory */
-	
+
 	struct lock *fd_lock;
 	struct file_info *fd[__OPEN_MAX];
 	/* add more material here as needed */
