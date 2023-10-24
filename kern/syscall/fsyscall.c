@@ -12,6 +12,8 @@
 #include <kern/errno.h>
 #include <uio.h>
 #include <kern/fcntl.h>
+#include <stat.h>
+#include <kern/seek.h>
 
 int sys_open(userptr_t user_pathname, int user_flag)
 {
@@ -202,25 +204,20 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 
 }
 
-off_t sys_lseek(int fd, off_t pos, int whence){
-	off_t result = -1;
-
+int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
 	if (whence < 0 || whence > 2) {
-		// errno = EINVAL;
-		return result;
+		return EINVAL;
 	}
 
 	lock_acquire(curproc->fd_lock);
-		if(fd >= __OPEN_MAX) || (fd < 0)){
-			// errno = EBADEF;
+		if(fd >= __OPEN_MAX || fd < 0){
 			lock_release(curproc->fd_lock);
-			return result;
+			return EBADF;
 		}
 
 		if(curproc->fd[fd]->file == NULL){
-			// errno = EBADEF;
 			lock_release(curproc->fd_lock);
-			return result;
+			return EBADF;
  		}
 	lock_release(curproc->fd_lock);
 
@@ -228,14 +225,15 @@ off_t sys_lseek(int fd, off_t pos, int whence){
 	lock_acquire(fhandle->fd_lock);
 
 	if (!VOP_ISSEEKABLE(fhandle->file)) {
-        lock_release(fhandle->fd_lock);
-		// errno = ESPIPE;
-        return result;
-    }
+        	lock_release(fhandle->fd_lock);
+        	return ESPIPE;
+    	}
 
 	struct stat *ptr = kmalloc(sizeof(struct stat));
 
-	if (ptr == NULL) { return -1; } //ENOMEM
+	if (ptr == NULL) {
+		return ENOMEM;
+	 }
 
 	VOP_STAT(fhandle->file, ptr);
 	off_t size = ptr->st_size;
@@ -251,17 +249,22 @@ off_t sys_lseek(int fd, off_t pos, int whence){
         break;
 
         case SEEK_END:
-        new_offset = eof + pos;
+        new_offset = size + pos;
         break;
     }
 
+	if (new_offset < 0) {
+		lock_release(fhandle->fd_lock);
+		return EINVAL;
+	}
 
+	fhandle->offset = new_offset;
+	*retval = new_offset >> 32;
+    	*retval2 = new_offset & 0xFFFFFFFF;
 
+	lock_release(fhandle->fd_lock);
 
-
-	lock_release(entry->fd_lock);
-
-	return result;
+	return 0;
 }
 
 

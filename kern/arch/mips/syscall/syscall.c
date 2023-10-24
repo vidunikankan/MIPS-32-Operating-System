@@ -80,6 +80,7 @@ syscall(struct trapframe *tf)
 {
 	int callno;
 	int32_t retval;
+	int32_t retval2;
 	int err;
 
 	KASSERT(curthread != NULL);
@@ -108,7 +109,7 @@ syscall(struct trapframe *tf)
 		err = sys___time((userptr_t)tf->tf_a0,
 				 (userptr_t)tf->tf_a1);
 		break;
-		
+
 		case SYS_open:
 		retval = sys_open((userptr_t)tf->tf_a0, (int)tf->tf_a1);
 		//TODO: Check if any error codes are within this range
@@ -121,7 +122,7 @@ syscall(struct trapframe *tf)
 		case SYS_close:
 		err = sys_close((int)tf->tf_a0);
 		break;
-	    
+
 		case SYS_read:
 		err = sys_read((int)tf->tf_a0,(void*)tf->tf_a1, (size_t)tf->tf_a2);
 		if(err > -1){
@@ -133,6 +134,13 @@ syscall(struct trapframe *tf)
 		case SYS_write:
 		err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2);
 	    if(err > -1) err = 0;
+		break;
+
+	case SYS_lseek: ;
+		int whence = 0;
+		copyin((const_userptr_t) tf->tf_sp + 16, &whence, sizeof(int));
+		off_t *pos = (off_t *) &tf->tf_a2;
+		err = sys_lseek((int) tf->tf_a0, *pos, whence, &retval, &retval2);
 		break;
 
 		default:
@@ -154,6 +162,7 @@ syscall(struct trapframe *tf)
 	else {
 		/* Success. */
 		tf->tf_v0 = retval;
+		tf->tf_v1 = retval2;
 		tf->tf_a3 = 0;      /* signal no error */
 	}
 
