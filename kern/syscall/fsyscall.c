@@ -20,11 +20,11 @@ int sys_open(userptr_t user_pathname, int user_flag)
 	size_t len_copied;
 	int index = 0;
 	pathname = (char*) kmalloc(sizeof(char)*(__PATH_MAX + 1));
-	
+
 
 	result = copyinstr(user_pathname, pathname, __PATH_MAX, &len_copied);
 	if(result){
-		
+
 		kfree(pathname);
 		return -1;
 	}
@@ -32,12 +32,12 @@ int sys_open(userptr_t user_pathname, int user_flag)
 	mode_t dummy_mode = 0;
 	struct vnode *dummy_file;
 
-	
+
 	//Think about case where vfs_open returns, but the index finder fails. Would this affect file?
-	
-	
+
+
 	lock_acquire(curproc->fd_lock);
-	
+
 	for(int i = 3; i < __OPEN_MAX; i++){
 		if(curproc->fd[i]->file == NULL){
 			index = i;
@@ -51,11 +51,11 @@ int sys_open(userptr_t user_pathname, int user_flag)
 		kfree(pathname);
 		return -1;
 	}
-	
+
 	lock_acquire(curproc->fd[index]->fd_lock);
 	result = vfs_open(pathname, user_flag, dummy_mode, &dummy_file);
 	if(result){
-         
+
           kfree(pathname);
 		  lock_release(curproc->fd[index]->fd_lock);
 		  return -1;
@@ -64,7 +64,7 @@ int sys_open(userptr_t user_pathname, int user_flag)
 
 	curproc->fd[index]->status_flag = user_flag;
 	curproc->fd[index]->file = dummy_file;
-	
+
 	kfree(pathname);
 	lock_release(curproc->fd[index]->fd_lock);
 
@@ -83,12 +83,12 @@ int sys_close(int user_fd){
 	curproc->fd[user_fd]->offset =0;
 	curproc->fd[user_fd]->status_flag =-1;
 	lock_release(curproc->fd[user_fd]->fd_lock);
-	
+
 	return 0;
 }
 
 size_t sys_read(int fd, void *user_buf, size_t buflen){
-	
+
 //TODO: Add individual fd locks to file_info struct
 	size_t bytes_read = -1;
 	lock_acquire(curproc->fd_lock);
@@ -103,7 +103,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
  		}
 	lock_release(curproc->fd_lock);
 
-		
+
 		lock_acquire(curproc->fd[fd]->fd_lock);
 		int CHECK_RD, CHECK_RDW;
 		CHECK_RD = curproc->fd[fd]->status_flag & O_RDONLY;
@@ -116,7 +116,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 		int result;
 		bytes_read = 0;
 		char *proc_buf = (char*)kmalloc(sizeof(char)*buflen);
-		
+
 		uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
 		result = VOP_READ(curproc->fd[fd]->file, &read_uio);
 
@@ -145,7 +145,7 @@ size_t sys_read(int fd, void *user_buf, size_t buflen){
 
 
 size_t sys_write(int fd, const void* user_buf, size_t nbytes){
-	
+
 	lock_acquire(curproc->fd_lock);
 	if(fd > (__OPEN_MAX -1) || (fd < 0)){
 		lock_release(curproc->fd_lock);
@@ -156,7 +156,7 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 		return -1;
 	}
 	lock_release(curproc->fd_lock);
-	
+
 	lock_acquire(curproc->fd[fd]->fd_lock);
 	int CHECK_WR, CHECK_RDW;
 
@@ -165,21 +165,21 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 
 	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)){
 		lock_release(curproc->fd[fd]->fd_lock);
-		return -1; //EINVAL	
+		return -1; //EINVAL
 	}
 
 	struct uio write_uio;
  	struct iovec write_iov;
 	int result;
-	size_t bytes_written;        
+	size_t bytes_written;
 	size_t bytes;
 	char *proc_buf = (char*)kmalloc(sizeof(char)*nbytes);
-		
+
 		result = copyinstr((userptr_t)user_buf, proc_buf, nbytes, &bytes);
 
 		uio_kinit(&write_iov, &write_uio, (void*)proc_buf, nbytes, curproc->fd[fd]->offset, UIO_WRITE);
 		result = VOP_WRITE(curproc->fd[fd]->file, &write_uio);
-	
+
 		if(result){
 			kfree(proc_buf);
 			lock_release(curproc->fd[fd]->fd_lock);
@@ -195,10 +195,67 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 
 }
 
-/*off_t sys_lseek(int fd, off_t pos, int whence){
-	int check;	
+off_t sys_lseek(int fd, off_t pos, int whence){
+	off_t result = -1;
 
-	check = VOP_ISSEEKABLE
+	if (whence < 0 || whence > 2) {
+		// errno = EINVAL;
+		return result;
+	}
+
+	lock_acquire(curproc->fd_lock);
+		if(fd >= __OPEN_MAX) || (fd < 0)){
+			// errno = EBADEF;
+			lock_release(curproc->fd_lock);
+			return result;
+		}
+
+		if(curproc->fd[fd]->file == NULL){
+			// errno = EBADEF;
+			lock_release(curproc->fd_lock);
+			return result;
+ 		}
+	lock_release(curproc->fd_lock);
+
+	struct file_info *fhandle = curproc->fd[fd];
+	lock_acquire(fhandle->fd_lock);
+
+	if (!VOP_ISSEEKABLE(fhandle->file)) {
+        lock_release(fhandle->fd_lock);
+		// errno = ESPIPE;
+        return result;
+    }
+
+	struct stat *ptr = kmalloc(sizeof(struct stat));
+
+	if (ptr == NULL) { return -1; } //ENOMEM
+
+	VOP_STAT(fhandle->file, ptr);
+	off_t size = ptr->st_size;
+	off_t new_offset = fhandle->offset;
+
+	switch (whence) {
+        case SEEK_SET:
+        new_offset = pos;
+        break;
+
+        case SEEK_CUR:
+        new_offset += pos;
+        break;
+
+        case SEEK_END:
+        new_offset = eof + pos;
+        break;
+    }
+
+
+
+
+
+	lock_release(entry->fd_lock);
+
+	return result;
+}
 
 
 
@@ -207,21 +264,12 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 
 
 
-}*/
-
-
-		
-
-		
-
-
-	
 
 
 
 
 
-		
+
 
 
 
