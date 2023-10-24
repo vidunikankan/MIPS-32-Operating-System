@@ -41,29 +41,35 @@ int sys_open(userptr_t user_pathname, int user_flag, int* retval)
 	lock_acquire(curproc->fd_lock);
 
 	for(int i = 3; i < __OPEN_MAX; i++){
-		if(curproc->fd[i]->file == NULL){
+		if(curproc->fd[i]== NULL){
 			index = i;
 			break;
 		}
 	}
-	lock_release(curproc->fd_lock);
 
+	lock_release(curproc->fd_lock);
+	
 	if(index == 0){
 
-		kfree(pathname);
+		kfree(pathname);	
 		return EMFILE;
+	}
+	
+	curproc->fd[index] = fd_create();
+	if(curproc->fd[index] == NULL){
+		return EIO;
 	}
 
 	lock_acquire(curproc->fd[index]->fd_lock);
 	result = vfs_open(pathname, user_flag, dummy_mode, &dummy_file);
+	
 	if(result){
-
           kfree(pathname);
 		  lock_release(curproc->fd[index]->fd_lock);
 		  return result;
  	}
 
-
+	
 	curproc->fd[index]->status_flag = user_flag;
 	curproc->fd[index]->file = dummy_file;
 	curproc->fd[index]->ref_count = 1;
@@ -81,7 +87,7 @@ int sys_close(int user_fd){
 	}
 
 	lock_acquire(curproc->fd_lock);
-		if(curproc->fd[user_fd]->file == NULL){
+		if(curproc->fd[user_fd] == NULL){
 			lock_release(curproc->fd_lock);
 			return EBADF;
 		}
@@ -95,6 +101,9 @@ int sys_close(int user_fd){
 	curproc->fd[user_fd]->offset =0;
 	curproc->fd[user_fd]->status_flag =-1;
 	lock_release(curproc->fd[user_fd]->fd_lock);
+	
+	fd_destroy(curproc->fd[user_fd]);
+
 	return 0;
 }
 
