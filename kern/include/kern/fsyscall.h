@@ -20,4 +20,4 @@ int sys_chdir(const char *pathname);
 
 int sys__getcwd(char *buf, size_t buflen, int32_t *retval);
 
-// int sys_dup2(int oldfd, int newfd, int32_t* retval);
+int sys_dup2(int oldfd, int newfd, int32_t* retval);
