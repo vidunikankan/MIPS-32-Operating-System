@@ -77,6 +77,13 @@ int sys_close(int user_fd){
 		return EBADF;
 	}
 
+	lock_acquire(curproc->fd_lock);
+		if(curproc->fd[user_fd]->file == NULL){
+			lock_release(curproc->fd_lock);
+			return EBADF;
+		}
+	lock_release(curproc->fd_lock);
+
 	lock_acquire(curproc->fd[user_fd]->fd_lock);
 	vfs_close(curproc->fd[user_fd]->file);
 	curproc->fd[user_fd]->file = NULL;

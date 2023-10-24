@@ -1,3 +1,5 @@
 build/
 defs.mk
 kern/compile/
+configure
+kern/build
