@@ -95,9 +95,6 @@ int sys_close(int user_fd){
 	curproc->fd[user_fd]->offset =0;
 	curproc->fd[user_fd]->status_flag =-1;
 	lock_release(curproc->fd[user_fd]->fd_lock);
-
-	lock_destroy(curproc->fd[user_fd]->fd_lock);
-
 	return 0;
 }
 
