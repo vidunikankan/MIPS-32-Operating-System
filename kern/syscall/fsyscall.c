@@ -217,7 +217,7 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes, int32_t* retval){
 
 	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)){
 		lock_release(curproc->fd[fd]->fd_lock);
-		return -1; //EINVAL
+		return EINVAL; //EINVAL
 	}
 
 	struct uio write_uio;
@@ -256,7 +256,6 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes, int32_t* retval){
 	lock_release(curproc->fd[fd]->fd_lock);
 
 	return 0;
-
 }
 
 int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
