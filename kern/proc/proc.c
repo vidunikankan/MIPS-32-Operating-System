@@ -116,8 +116,7 @@ proc_create(const char *name)
 	}
 
 	for(int i = 0; i < __OPEN_MAX; i++){
-		proc->fd[i] = fd_create();
-		if(proc->fd[i] == NULL) return NULL;
+		proc->fd[i] = NULL;
 	}
 
 	return proc;
@@ -209,7 +208,7 @@ proc_destroy(struct proc *proc)
 	lock_destroy(proc->fd_lock);
 
 	for(int i = 0; i < __OPEN_MAX; i++){
-		fd_destroy(proc->fd[i]);
+		KASSERT(proc->fd[i] == NULL);
 	}
 
 	kfree(proc->p_name);
@@ -256,12 +255,27 @@ proc_create_runprogram(const char *name)
 	/* VM fields */
 
 	newproc->p_addrspace = NULL;
+	newproc->fd[STDIN_FILENO] = fd_create();
+	if(newproc->fd[STDIN_FILENO] == NULL){
+		return NULL;
+	}
+
+	newproc->fd[STDOUT_FILENO] = fd_create();
+	if(newproc->fd[STDOUT_FILENO] == NULL){
+		return NULL;
+	}
+	
+	newproc->fd[STDERR_FILENO] = fd_create();
+	if(newproc->fd[STDERR_FILENO] == NULL){
+		return NULL;
+	}
 
 	/* VFS fields */
 	result = vfs_open(arg, O_RDONLY, 0664, &in);
 	if(result){
 		return NULL;
 	}
+	
 	newproc->fd[STDIN_FILENO]->file  = in;
 	newproc->fd[STDIN_FILENO]->status_flag = O_RDONLY;
 

@@ -117,7 +117,7 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 			lock_release(curproc->fd_lock);
 			return EBADF; //EBADF
 		}
-		if(curproc->fd[fd]->file == NULL){
+		if(curproc->fd[fd] == NULL){
 			lock_release(curproc->fd_lock);
 			return EBADF;
  		}
