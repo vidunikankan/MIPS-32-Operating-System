@@ -117,7 +117,7 @@ int sys_close(int user_fd){
 int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 
 //TODO: Add individual fd locks to file_info struct
-	int bytes_read = -1;
+	size_t bytes_read = -1;
 	lock_acquire(curproc->fd_lock);
 
 		if(fd > (__OPEN_MAX -1) || (fd < 0)){
@@ -177,14 +177,6 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 			return result;
 		}
 
-
-		// result = copyout((const void*)proc_buf, (userptr_t)user_buf, buflen);
-		// if(result){
-		// 	kfree(proc_buf);
-	    //     lock_release(curproc->fd[fd]->fd_lock);
-		// 	return result;
-		// }
-
 		bytes_read = buflen - read_uio.uio_resid;
 		curproc->fd[fd]->offset += (off_t) bytes_read;
 		kfree(proc_buf);
@@ -211,10 +203,10 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes, int32_t* retval){
 
 	lock_acquire(curproc->fd[fd]->fd_lock);
 	int CHECK_WR, CHECK_RDW;
-	
+
 	CHECK_WR = curproc->fd[fd]->status_flag & O_WRONLY;
 	CHECK_RDW = curproc->fd[fd]->status_flag & O_RDWR;
-	
+
 
 	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)){
 		lock_release(curproc->fd[fd]->fd_lock);
@@ -295,7 +287,7 @@ int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
 
 	VOP_STAT(fhandle->file, ptr);
 	off_t size = ptr->st_size;
-	off_t new_offset = fhandle->offset;
+	off_t new_offset = (off_t) fhandle->offset;
 
 	kfree(ptr);
 
@@ -324,8 +316,8 @@ int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
 	}
 
 	fhandle->offset = new_offset;
-	*retval = new_offset >> 32;
-	*retval2 = new_offset;
+	*retval = (new_offset >> 32) & 0xFFFFFFFF;
+	*retval2 = new_offset & 0xFFFFFFFF;
 
 	lock_release(fhandle->fd_lock);
 
