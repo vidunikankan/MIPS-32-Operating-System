@@ -196,16 +196,16 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 
 
 
-size_t sys_write(int fd, const void* user_buf, size_t nbytes){
+size_t sys_write(int fd, const void* user_buf, size_t nbytes, int32_t* retval){
 
 	lock_acquire(curproc->fd_lock);
 	if(fd > (__OPEN_MAX -1) || (fd < 0)){
 		lock_release(curproc->fd_lock);
-		return -1; //EBADF
+		return EBADF;
 	}
  	if(curproc->fd[fd] == NULL){
 		lock_release(curproc->fd_lock);
-		return -1;
+		return EBADF;
 	}
 	lock_release(curproc->fd_lock);
 
@@ -245,16 +245,17 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 		if(result){
 			kfree(proc_buf);
 			lock_release(curproc->fd[fd]->fd_lock);
-			return -1;
+			return EBADF;
 		}
 
 
 	bytes_written = nbytes - write_uio.uio_resid;
 	curproc->fd[fd]->offset += (off_t) bytes_written;
 	kfree(proc_buf);
+	*retval = bytes_written;
 	lock_release(curproc->fd[fd]->fd_lock);
 
-	return bytes_written;
+	return 0;
 
 }
 
