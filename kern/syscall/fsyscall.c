@@ -309,6 +309,11 @@ int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
         case SEEK_END:
         new_offset = size + pos;
         break;
+
+		default:
+		lock_release(fhandle->fd_lock);
+		return EINVAL;
+		break;
     }
 
 	if (new_offset < 0) {
@@ -317,8 +322,8 @@ int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
 	}
 
 	fhandle->offset = new_offset;
-	*retval = (uint32_t) (new_offset >> 32);
-	*retval2 = (uint32_t) new_offset;
+	*retval = new_offset >> 32;
+	*retval2 = new_offset;
 
 	lock_release(fhandle->fd_lock);
 
