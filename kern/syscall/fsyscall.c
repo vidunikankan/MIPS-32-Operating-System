@@ -211,14 +211,16 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes, int32_t* retval){
 
 	lock_acquire(curproc->fd[fd]->fd_lock);
 	int CHECK_WR, CHECK_RDW;
-
+	
 	CHECK_WR = curproc->fd[fd]->status_flag & O_WRONLY;
 	CHECK_RDW = curproc->fd[fd]->status_flag & O_RDWR;
+	
 
 	if(!(CHECK_WR == O_WRONLY || CHECK_RDW == O_RDWR)){
 		lock_release(curproc->fd[fd]->fd_lock);
-		return EINVAL; //EINVAL
+		return EBADF; //EINVAL
 	}
+
 
 	struct uio write_uio;
  	struct iovec write_iov;
@@ -245,7 +247,7 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes, int32_t* retval){
 		if(result){
 			kfree(proc_buf);
 			lock_release(curproc->fd[fd]->fd_lock);
-			return EBADF;
+			return result;
 		}
 
 
