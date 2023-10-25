@@ -128,7 +128,7 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 			lock_release(curproc->fd_lock);
 			return EBADF;
  		}
-	lock_release(curproc->fd_lock);
+		lock_release(curproc->fd_lock);
 
 
 		lock_acquire(curproc->fd[fd]->fd_lock);
@@ -152,7 +152,10 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 		struct iovec read_iov;
 		int result;
 		bytes_read = 0;
+		// size_t bytes;
 		char *proc_buf = (char*)kmalloc(sizeof(char)*buflen);
+		// result = copyinstr((userptr_t)user_buf, proc_buf, nbytes, &bytes);
+
 
 	// uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
 	read_iov.iov_ubase = (userptr_t) user_buf;
@@ -174,7 +177,6 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 			return result;
 		}
 
-		curproc->fd[fd]->offset = read_uio.uio_offset;
 
 		// result = copyout((const void*)proc_buf, (userptr_t)user_buf, buflen);
 		// if(result){
@@ -184,6 +186,7 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 		// }
 
 		bytes_read = buflen - read_uio.uio_resid;
+		curproc->fd[fd]->offset += (off_t) bytes_read;
 		kfree(proc_buf);
 		lock_release(curproc->fd[fd]->fd_lock);
 		*retval = bytes_read;
@@ -221,10 +224,10 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
  	struct iovec write_iov;
 	int result;
 	size_t bytes_written;
-	size_t bytes;
+	// size_t bytes;
 	char *proc_buf = (char*)kmalloc(sizeof(char)*nbytes);
 
-		result = copyinstr((userptr_t)user_buf, proc_buf, nbytes, &bytes);
+		// result = copyinstr((userptr_t)user_buf, proc_buf, nbytes, &bytes);
 
 		//  uio_kinit(&write_iov, &write_uio, (void*)proc_buf, nbytes, curproc->fd[fd]->offset, UIO_WRITE);
 	 write_iov.iov_ubase = (userptr_t) user_buf;
@@ -245,8 +248,9 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 			return -1;
 		}
 
-	curproc->fd[fd]->offset = write_uio.uio_offset;
+
 	bytes_written = nbytes - write_uio.uio_resid;
+	curproc->fd[fd]->offset += (off_t) bytes_written;
 	kfree(proc_buf);
 	lock_release(curproc->fd[fd]->fd_lock);
 
@@ -267,10 +271,12 @@ int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
 		lock_release(curproc->fd_lock);
 		return EBADF;
 	}
-	lock_release(curproc->fd_lock);
 
 	struct file_info *fhandle = curproc->fd[fd];
+
 	lock_acquire(fhandle->fd_lock);
+	lock_release(curproc->fd_lock);
+
 
 	if (!VOP_ISSEEKABLE(fhandle->file)) {
 		lock_release(fhandle->fd_lock);
@@ -381,27 +387,24 @@ int sys_dup2(int oldfd, int newfd, int32_t* retval) {
 		return EBADF;
 	}
 
-	lock_release(curproc->fd_lock);
-
-	lock_acquire(old->fd_lock);
 
 	if (old == new) {
 		*retval = oldfd;
+		lock_release(curproc->fd_lock);
 		return 0;
 	}
 
 	if(curproc->fd[newfd] != NULL){sys_close(newfd);}
 
 	if (curproc->fd[newfd] != NULL) {
-		lock_release(old->fd_lock);
+		lock_release(curproc->fd_lock);
 		return -1;
 	}
-
 
 	curproc->fd[newfd] = curproc->fd[oldfd];
 	curproc->fd[oldfd]->ref_count++;
 
-	lock_release(old->fd_lock);
+	lock_release(curproc->fd_lock);
 
 	*retval = newfd;
 	return 0;
