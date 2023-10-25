@@ -264,7 +264,7 @@ proc_create_runprogram(const char *name)
 	if(newproc->fd[STDOUT_FILENO] == NULL){
 		return NULL;
 	}
-	
+
 	newproc->fd[STDERR_FILENO] = fd_create();
 	if(newproc->fd[STDERR_FILENO] == NULL){
 		return NULL;
@@ -275,7 +275,7 @@ proc_create_runprogram(const char *name)
 	if(result){
 		return NULL;
 	}
-	
+
 	newproc->fd[STDIN_FILENO]->file  = in;
 	newproc->fd[STDIN_FILENO]->status_flag = O_RDONLY;
 

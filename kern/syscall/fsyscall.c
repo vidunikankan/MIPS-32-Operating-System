@@ -41,35 +41,35 @@ int sys_open(userptr_t user_pathname, int user_flag, int* retval)
 	lock_acquire(curproc->fd_lock);
 
 	for(int i = 3; i < __OPEN_MAX; i++){
-		if(curproc->fd[i]== NULL){
+		if(curproc->fd[i] == NULL){
 			index = i;
 			break;
 		}
 	}
 
-	lock_release(curproc->fd_lock);
-	
 	if(index == 0){
-
-		kfree(pathname);	
+		lock_release(curproc->fd_lock);
+		kfree(pathname);
 		return EMFILE;
 	}
-	
+
 	curproc->fd[index] = fd_create();
 	if(curproc->fd[index] == NULL){
+		lock_release(curproc->fd_lock);
 		return EIO;
 	}
 
+	lock_release(curproc->fd_lock);
+
 	lock_acquire(curproc->fd[index]->fd_lock);
 	result = vfs_open(pathname, user_flag, dummy_mode, &dummy_file);
-	
+
 	if(result){
           kfree(pathname);
 		  lock_release(curproc->fd[index]->fd_lock);
 		  return result;
  	}
 
-	
 	curproc->fd[index]->status_flag = user_flag;
 	curproc->fd[index]->file = dummy_file;
 	curproc->fd[index]->ref_count = 1;
@@ -87,22 +87,29 @@ int sys_close(int user_fd){
 	}
 
 	lock_acquire(curproc->fd_lock);
-		if(curproc->fd[user_fd] == NULL){
-			lock_release(curproc->fd_lock);
-			return EBADF;
-		}
+	if(curproc->fd[user_fd] == NULL){
+		lock_release(curproc->fd_lock);
+		return EBADF;
+	}
 	lock_release(curproc->fd_lock);
 
-	lock_acquire(curproc->fd[user_fd]->fd_lock);
-	if (--(curproc->fd[user_fd]->ref_count) == 0) {
-		vfs_close(curproc->fd[user_fd]->file);
+	struct file_info *fhandle = curproc->fd[user_fd];
+	lock_acquire(fhandle->fd_lock);
+
+	int count = fhandle->ref_count - 1;
+
+	if (count <= 0) {
+		vfs_close(fhandle->file);
 	}
-	curproc->fd[user_fd]->file = NULL;
-	curproc->fd[user_fd]->offset =0;
-	curproc->fd[user_fd]->status_flag =-1;
-	lock_release(curproc->fd[user_fd]->fd_lock);
-	
-	fd_destroy(curproc->fd[user_fd]);
+
+	fhandle->ref_count = count;
+	curproc->fd[user_fd] = NULL;
+
+	lock_release(fhandle->fd_lock);
+
+	if (count <= 0) {
+		fd_destroy(fhandle);
+	}
 
 	return 0;
 }
@@ -128,7 +135,7 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 		int CHECK_RD;
 		int CHECK_WR;
 		int CHECK_RDWR;
-		
+
 		CHECK_WR = curproc->fd[fd]->status_flag & O_WRONLY;
 		CHECK_RD = curproc->fd[fd]->status_flag & O_RDONLY;
 		CHECK_RDWR = curproc->fd[fd]->status_flag & O_RDWR;
@@ -147,17 +154,17 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 		bytes_read = 0;
 		char *proc_buf = (char*)kmalloc(sizeof(char)*buflen);
 
-	uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
-	/*read_iov.iov_ubase = (void *)proc_buf;
+	// uio_kinit(&read_iov, &read_uio, (void*)proc_buf, buflen, curproc->fd[fd]->offset, UIO_READ);
+	read_iov.iov_ubase = (userptr_t) user_buf;
       read_iov.iov_len = buflen;
       read_uio.uio_iov = &read_iov;
       read_uio.uio_iovcnt = 1;
       read_uio.uio_resid = buflen;
-      read_uio.uio_offset = 0;
+      read_uio.uio_offset = curproc->fd[fd]->offset;
       read_uio.uio_segflg = UIO_USERSPACE;
       read_uio.uio_rw = UIO_READ;
       read_uio.uio_space = curproc->p_addrspace;
-*/
+
 
 		result = VOP_READ(curproc->fd[fd]->file, &read_uio);
 
@@ -169,12 +176,12 @@ int sys_read(int fd, void *user_buf, size_t buflen, int* retval){
 
 		curproc->fd[fd]->offset = read_uio.uio_offset;
 
-		result = copyout((const void*)proc_buf, (userptr_t)user_buf, buflen);
-		if(result){
-			kfree(proc_buf);
-	        lock_release(curproc->fd[fd]->fd_lock);
-			return result;
-		}
+		// result = copyout((const void*)proc_buf, (userptr_t)user_buf, buflen);
+		// if(result){
+		// 	kfree(proc_buf);
+	    //     lock_release(curproc->fd[fd]->fd_lock);
+		// 	return result;
+		// }
 
 		bytes_read = buflen - read_uio.uio_resid;
 		kfree(proc_buf);
@@ -193,7 +200,7 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 		lock_release(curproc->fd_lock);
 		return -1; //EBADF
 	}
- 	if(curproc->fd[fd]->file == NULL){
+ 	if(curproc->fd[fd] == NULL){
 		lock_release(curproc->fd_lock);
 		return -1;
 	}
@@ -219,17 +226,17 @@ size_t sys_write(int fd, const void* user_buf, size_t nbytes){
 
 		result = copyinstr((userptr_t)user_buf, proc_buf, nbytes, &bytes);
 
-		uio_kinit(&write_iov, &write_uio, (void*)proc_buf, nbytes, curproc->fd[fd]->offset, UIO_WRITE);
-	/*write_iov.iov_ubase = (void*)proc_buf;
+		//  uio_kinit(&write_iov, &write_uio, (void*)proc_buf, nbytes, curproc->fd[fd]->offset, UIO_WRITE);
+	 write_iov.iov_ubase = (userptr_t) user_buf;
      write_iov.iov_len = nbytes;
      write_uio.uio_iov = &write_iov;
      write_uio.uio_iovcnt = 1;
      write_uio.uio_resid = nbytes;
-     write_uio.uio_offset = 0;
+     write_uio.uio_offset = curproc->fd[fd]->offset;
      write_uio.uio_segflg = UIO_USERSPACE;
 	 write_uio.uio_rw = UIO_WRITE;
      write_uio.uio_space = curproc->p_addrspace;
-*/
+
 		result = VOP_WRITE(curproc->fd[fd]->file, &write_uio);
 
 		if(result){
@@ -256,7 +263,7 @@ int sys_lseek(int fd, off_t pos, int whence, int32_t* retval, int32_t* retval2){
 		return EBADF;
 	}
 
-	if(curproc->fd[fd]->file == NULL){
+	if(curproc->fd[fd]== NULL){
 		lock_release(curproc->fd_lock);
 		return EBADF;
 	}
@@ -364,27 +371,36 @@ int sys__getcwd(char *buf, size_t buflen, int32_t *retval) {
 int sys_dup2(int oldfd, int newfd, int32_t* retval) {
 	if (newfd < 0 || oldfd < 0 || newfd >= OPEN_MAX || oldfd >= OPEN_MAX) {return EBADF;}
 
-	lock_acquire(curproc->fd_lock);
-	if(curproc->fd[oldfd]->file == NULL){
-		lock_release(curproc->fd_lock);
-		return EBADF;
-	}
-	lock_release(curproc->fd_lock);
-
 	struct file_info *old = curproc->fd[oldfd];
 	struct file_info *new = curproc->fd[newfd];
 
+	lock_acquire(curproc->fd_lock);
+
+	if(old == NULL){
+		lock_release(curproc->fd_lock);
+		return EBADF;
+	}
+
+	lock_release(curproc->fd_lock);
+
 	lock_acquire(old->fd_lock);
-	if (old == new) {return 0;}
 
-	if(curproc->fd[newfd]->file != NULL){sys_close(newfd);}
+	if (old == new) {
+		*retval = oldfd;
+		return 0;
+	}
 
-	lock_acquire(new->fd_lock);
+	if(curproc->fd[newfd] != NULL){sys_close(newfd);}
+
+	if (curproc->fd[newfd] != NULL) {
+		lock_release(old->fd_lock);
+		return -1;
+	}
+
 
 	curproc->fd[newfd] = curproc->fd[oldfd];
 	curproc->fd[oldfd]->ref_count++;
 
-	lock_release(new->fd_lock);
 	lock_release(old->fd_lock);
 
 	*retval = newfd;
