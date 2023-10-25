@@ -99,6 +99,12 @@ syscall(struct trapframe *tf)
 	 * like write.
 	 */
 
+	 /*
+	 * The functions are implemented in kern/syscall/fsyscall.c
+	 * They return the error code, 0 if successful and no error
+	 * The returned values (e,g, fd index is returned through either retval or both of retval or retval1)
+	 */
+
 	retval = 0;
 
 	switch (callno) {
@@ -126,7 +132,6 @@ syscall(struct trapframe *tf)
 
 		case SYS_write:
 			err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2, &retval);
-			// if(err > -1) err = 0;
 			break;
 
 		case SYS_lseek: ;

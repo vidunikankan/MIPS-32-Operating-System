@@ -43,8 +43,9 @@ struct addrspace;
 struct vnode;
 
 /*
- * Process structure.
+ * File descriptor structure
  */
+
 struct file_info {
 	struct vnode * file;
 	struct lock *fd_lock;
@@ -52,6 +53,10 @@ struct file_info {
 	off_t offset;
 	int ref_count;
 };
+
+/*
+ * Process structure.
+ */
 
 struct proc {
 	char *p_name;			/* Name of this process */

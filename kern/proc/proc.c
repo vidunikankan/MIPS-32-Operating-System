@@ -60,13 +60,16 @@ struct proc *kproc;
 struct file_info *fd_create(void){
 
 	struct file_info *fd = (struct file_info*)kmalloc(sizeof(struct file_info));
-	if(fd == NULL){
+
+	if (fd == NULL){
 		return NULL;
 	}
 	struct lock *lock = lock_create("fd lock");
-	if(lock == NULL){
+
+	if (lock == NULL){
 		return NULL;
 	}
+
 	fd->fd_lock = lock;
 	fd->file = NULL;
 	fd->offset = 0;
@@ -111,11 +114,11 @@ proc_create(const char *name)
 	proc->p_cwd = NULL;
 
 	proc->fd_lock = lock_create("proc lock");
-	if(proc->fd_lock == NULL){
+	if (proc->fd_lock == NULL){
 		return NULL;
 	}
 
-	for(int i = 0; i < __OPEN_MAX; i++){
+	for (int i = 0; i < __OPEN_MAX; i++){
 		proc->fd[i] = NULL;
 	}
 
