@@ -1,3 +1,106 @@
 CODE READING:
 
+1. What are the ELF magic numbers?
+ELF magic numbers are four-byte values (‘0x7f’, ‘E’, ‘L’, ‘F’) in the e_ident array appearing at the start of every ELF file. It is used to indicate the file format when accessing an ELF file.
+(Reference from "/usr/include/elf.h" starting from line 103)
+/* Fields in the e_ident array.  The EI_* macros are indices into the
+   array.  The macros under each EI_* macro are the values the byte
+   may have.  */
+
+#define EI_MAG0         0               /* File identification byte 0 index */
+#define ELFMAG0         0x7f            /* Magic number byte 0 */
+
+#define EI_MAG1         1               /* File identification byte 1 index */
+#define ELFMAG1         'E'             /* Magic number byte 1 */
+
+#define EI_MAG2         2               /* File identification byte 2 index */
+#define ELFMAG2         'L'             /* Magic number byte 2 */
+
+#define EI_MAG3         3               /* File identification byte 3 index */
+#define ELFMAG3         'F'             /* Magic number byte 3 */
+
+
+2. What is the difference between UIO_USERISPACE and UIO_USERSPACE? When should one use UIO_SYSSPACE instead?
+First, understand that a uio is an abstraction encapsulating a memory block and the uio structure is used to manage blocks of data moved around by the kernel.
+The three are flags for “uio_segflg” in a uio
+UIO_USERSPACE indicates that user data is transferred between the kernel and user space. 
+UIO_USERSPACE indicates that the user code is transferred between kernel and user space. 
+One should use UIO_SYSSPACE when data is transferred within the kernel.
+(Reference from "kern/include/uio.h" starting from line 66)
+/* Source/destination. */
+enum uio_seg {
+        UIO_USERISPACE,                 /* User process code. */
+        UIO_USERSPACE,                  /* User process data. */
+        UIO_SYSSPACE,                   /* Kernel. */
+};
+
+3. Why can the struct uio that is used to read in a segment be allocated on the stack in load_segment() (i.e., where does the memory read actually go)?
+Uio is an abstraction used to transfer data as mentioned above, so it is not related to the final memory read location which goes to vaddr.
+(Reference from "kern/syscall/loadelf.c" line 96)
+iov.iov_ubase = (userptr_t)vaddr;
+
+4. In runprogram(), why is it important to call vfs_close() before going to usermode?
+After loading the ELF file into a new address space, vfs_close is called to decrement reference count so it can be handled by garbage collection. If it is not called, then the file might never be closed, causing memory leakage.
+
+5. What function forces the processor to switch into usermode? Is this function machine dependent?
+enter_new_process in "kern/arch/mips/locore/trap.c" line 423 forces the processor to switch into user mode because it sets up a trap frame.
+It is machine dependent because it calls mips_usermode(&tf) in line 437 which calls asm_usermode(tf) (located in "kern/arch/mips/locore/exception-mips1.S" line 320) in line 403 - assembly code.
+
+6. In what file are copyin and copyout defined? memmove? Why can't copyin and copyout be implemented as simply as memmove?
+Copyin (line 153) and copyout (line 189) are implemented in "kern/vm/copyinout.c" with the head file "kern/include/copyinout.h". 
+Memmove is defined in "common/libc/string/memmove.c" line 49.
+Since copyin and copyout manage copying memory between the kernel address space and user address space, it has to check if the user space memory is in the valid/proper range by calling copycheck and doesn’t overlap with the kernel address space.
+
+7. What (briefly) is the purpose of userptr_t?
+Userptr_t is a pointer pointing to a one-byte struct that indicates the starting memory address in user space. For instance, when copyin is called, the memory to be copied start from address userptr_t up to userptr_t + len if it is valid.
+
+8. What is the numerical value of the exception code for a MIPS system call?
+It is 8
+(Reference from "kern/arch/mips/include/trapframe.h" line 91)
+#define EX_SYS    8    /* Syscall */
+
+9. How many bytes is an instruction in MIPS? (Answer this by reading syscall() carefully, not by looking somewhere else.)
+It is 4 bytes because the program counter (tf_epc register) in trapframe is incremented by 4 bytes
+		(Reference from "kern/arch/mips/syscall/syscall.c" line 141)
+        /*
+         * Now, advance the program counter, to avoid restarting
+         * the syscall over and over again.
+         */
+
+        tf->tf_epc += 4;
+10. Why do you "probably want to change" the implementation of kill_curthread()?
+A trap in usermode shouldn’t throw a kernel panic and fail because the kernel can just kill the thread. Hence, I might add some handlers to either kill the process or handle the errors.
+
+11. What would be required to implement a system call that took more than 4 arguments?
+The arguments can be allocated on the user stack and accessed using copyin(). The kernel can access it via user’s sp stored in trapframe
+
+12. What is the purpose of the SYSCALL macro?
+SYSCALL macro is used to generate assembly for each syscall into syscalls.h. The generated assembly for each syscall loads the syscall’s syscall number into v0 before calling the __syscall function (reference from "build/userland/lib/libc/syscalls.S")
+
+13. What is the MIPS instruction that actually triggers a system call? (Answer this by reading the source in userland/lib/libc/arch/mips, not looking somewhere else.)
+Syscall instruction is called in line 84 by __syscall
+(Reference from "userland/lib/libc/arch/mips/syscalls-mips.S" line 84)
+__syscall:
+   syscall              /* make system call */
+   beq a3, $0, 1f       /* if a3 is zero, call succeeded */
+   nop                  /* delay slot */
+   sw v0, errno        /* call failed: store errno */
+   li v1, -1            /* and force return value to -1 */
+   li v0, -1
+
+14. After reading syscalls-mips.S and syscall.c, you should be prepared to answer the following question: OS/161 supports 64-bit values; lseek() takes and returns a 64-bit offset value. Thus, lseek() takes a 32-bit file handle (arg0), a 64-bit offset (arg1), a 32-bit whence (arg2), and needs to return a 64-bit offset value. In void syscall(struct trapframe *tf) where will you find each of the three arguments (in which registers) and how will you return the 64-bit offset?
+- The file handle (arg0): stored in register a0
+- Offset (arg1): stored in register a2/a3 (since the first arg is 32 bit)
+- Whence (arg2): in the user stack at sp + 16
+- To return the 64-bit offset, it will be in v0/v1 (for 32 bit in v0)
+
+15. As you were reading the code in runprogram.c and loadelf.c, you probably noticed how the kernel manipulates the files. Which kernel function is called to open a file? Which macro is called to read the file? What about to write a file? Which data structure is used in the kernel to represent an open file? 
+- vfs_open(): open a file
+- VOP_READ: used to read a file
+- VOP_WRITE:  used to write to a file
+- vnode: represents an open file
+
+16. What is the purpose of VOP_INCREF and VOP_DECREF?
+Vnode uses reference counting to keep track of its references when it gets opened or closed. VOP_INCREF and VOP_DECREF are used to increment (when it is opened) and decrement (when it is closed) the reference count respectively. It is handled by garbage collection (cleaned or freed) when ref == 0. 
+
 
