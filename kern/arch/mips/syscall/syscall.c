@@ -38,6 +38,7 @@
 #include <kern/fsyscall.h>
 #include <kern/psyscall.h>
 #include <addrspace.h>
+#include <kern/wait.h>
 /*
  * System call dispatcher.
  *
@@ -82,6 +83,7 @@ syscall(struct trapframe *tf)
 	int callno;
 	int32_t retval;
 	int32_t retval2;
+	int waitcode;
 	int err;
 
 
@@ -169,7 +171,8 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS__exit:
-			sys__exit((int)tf->tf_a0);
+			waitcode = (int) _MKWAIT_EXIT(tf->tf_a0);
+			sys__exit(waitcode);
 			panic("return from exit");
 			break;
 
@@ -178,7 +181,6 @@ syscall(struct trapframe *tf)
 			err = ENOSYS;
 			break;
 	}
-
 
 	if (err) {
 		/*
