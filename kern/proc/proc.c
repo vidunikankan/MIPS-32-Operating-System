@@ -57,8 +57,10 @@
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
-struct pid_entry*  pids[10];
-
+struct lock *pid_lock;
+//struct pid_entry*  pids[10];
+pid_t pid_counter;
+int pid_status[__PID_MAX];
 struct pid_entry *pid_entry_create(void){
 	struct pid_entry *pe = (struct pid_entry*)kmalloc(sizeof(struct pid_entry));	
 	if(pe == NULL){
@@ -121,9 +123,9 @@ proc_create(const char *name)
 	}
 
 	//KASSERT(pid_lock != NULL);
-
-	for(i = 0; i < 10; i++){
-		lock_acquire(pids[i]->pid_lock);
+	lock_acquire(pid_lock);
+	for(i = 0; i < __PID_MAX; i++){
+		/*lock_acquire(pids[i]->pid_lock);
 		if(pids[i]->proc == NULL) {
 				proc->pid = i;
 				pids[i]->proc = proc;
@@ -131,9 +133,14 @@ proc_create(const char *name)
 				lock_release(pids[i]->pid_lock);
 				break;
 		}
-		lock_release(pids[i]->pid_lock);
-
+		lock_release(pids[i]->pid_lock);*/
+		if(pid_status[i] == 0){
+			proc->pid = i;
+			break;
+		}
 	}
+	lock_release(pid_lock);
+
 	//Add a check to see if "i" has reached open_max
 		/*if(i == __OPEN_MAX){
 			//NOTE: figure out how to return ENOMEM in this case
@@ -274,13 +281,20 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {	
-		
-	for(int i = 0; i < 10; i++){
-		pids[i] = pid_entry_create();
+	pid_counter = 0;
+	pid_lock = lock_create("pid lock");
+	if(pid_lock == NULL){
+		panic("pid lock creation failed");
+	}
+	lock_acquire(pid_lock);
+	for(int i = 0; i < __PID_MAX; i++){
+		/*pids[i] = pid_entry_create();
 		if(pids[i] == NULL){
 			panic("pid entry create failed\n");
-		}
+		}*/
+		pid_status[i] = 0;
 	}
+	lock_release(pid_lock);
 
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {

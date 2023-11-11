@@ -37,7 +37,7 @@
 #include <syscall.h>
 #include <kern/fsyscall.h>
 #include <kern/psyscall.h>
-
+#include <addrspace.h>
 /*
  * System call dispatcher.
  *
@@ -208,8 +208,9 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
-{
+enter_forked_process(struct trapframe *tf, struct addrspace *as)
+{	
+	if(as == 0){
 	struct trapframe new_tf;
 	new_tf.tf_status = tf->tf_status;
 	new_tf.tf_epc = tf->tf_epc;
@@ -217,5 +218,7 @@ enter_forked_process(struct trapframe *tf)
 	new_tf.tf_a1 = tf->tf_a1;
 	new_tf.tf_a2 = tf->tf_a2;
 	new_tf.tf_sp = tf->tf_sp;
+	
 	mips_usermode(&new_tf);
+	}
 }
