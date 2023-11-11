@@ -61,23 +61,22 @@ struct lock *pid_lock;
 //struct pid_entry*  pids[10];
 pid_t pid_counter;
 int pid_status[__PID_MAX];
-struct pid_entry *pid_entry_create(void){
-	struct pid_entry *pe = (struct pid_entry*)kmalloc(sizeof(struct pid_entry));	
-	if(pe == NULL){
-		return NULL;
 
+struct pid_entry *pid_entry_create(void){
+	struct pid_entry *pe = (struct pid_entry*)kmalloc(sizeof(struct pid_entry));
+	if (pe == NULL){
+		return NULL;
 	}
-	
+
 	pe->proc = NULL;
 	pe->pid_lock = lock_create("pid");
-	
-	if(pe->pid_lock == NULL){
+
+	if (pe->pid_lock == NULL){
 		kfree(pe);
 		return NULL;
 	}
-	
-	return pe;
 
+	return pe;
 }
 
 struct file_info *fd_create(void){
@@ -129,13 +128,14 @@ proc_create(const char *name)
 		if(pids[i]->proc == NULL) {
 				proc->pid = i;
 				pids[i]->proc = proc;
-				
+
 				lock_release(pids[i]->pid_lock);
 				break;
 		}
 		lock_release(pids[i]->pid_lock);*/
 		if(pid_status[i] == 0){
 			proc->pid = i;
+			pid_status[i] = 1;
 			break;
 		}
 	}
@@ -148,7 +148,7 @@ proc_create(const char *name)
 			lock_release(pid_lock);
 			return NULL;
 		}*/
-	
+
 
 	proc->p_name = kstrdup(name);
 	if (proc->p_name == NULL) {
@@ -167,6 +167,7 @@ proc_create(const char *name)
 
 	proc->fd_lock = lock_create("proc lock");
 	if (proc->fd_lock == NULL){
+		kfree(proc);
 		return NULL;
 	}
 
@@ -178,7 +179,7 @@ proc_create(const char *name)
 }
 struct proc* proc_fork(const char* name){
 	struct proc* proc;
-	proc =proc_create(name);
+	proc = proc_create(name);
 	return proc;
 }
 /*
@@ -280,10 +281,10 @@ proc_destroy(struct proc *proc)
  */
 void
 proc_bootstrap(void)
-{	
+{
 	pid_counter = 0;
 	pid_lock = lock_create("pid lock");
-	if(pid_lock == NULL){
+	if (pid_lock == NULL){
 		panic("pid lock creation failed");
 	}
 	lock_acquire(pid_lock);
