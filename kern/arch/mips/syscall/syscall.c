@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 #include <kern/fsyscall.h>
+#include <kern/psyscall.h>
 
 /*
  * System call dispatcher.
@@ -152,6 +153,15 @@ syscall(struct trapframe *tf)
 		case SYS_dup2:
 			err = sys_dup2((int) tf->tf_a0, (int) tf->tf_a1, &retval);
 			break;
+		
+		case SYS_fork:
+			err = sys_fork(tf, &retval);
+			break;
+
+		case SYS_getpid:
+			retval = sys_getpid();
+			err = 0;
+			break;
 
 		default:
 			kprintf("Unknown syscall %d\n", callno);
@@ -200,5 +210,12 @@ syscall(struct trapframe *tf)
 void
 enter_forked_process(struct trapframe *tf)
 {
-	(void)tf;
+	struct trapframe new_tf;
+	new_tf.tf_status = tf->tf_status;
+	new_tf.tf_epc = tf->tf_epc;
+	new_tf.tf_a0 = tf->tf_a0;
+	new_tf.tf_a1 = tf->tf_a1;
+	new_tf.tf_a2 = tf->tf_a2;
+	new_tf.tf_sp = tf->tf_sp;
+	mips_usermode(&new_tf);
 }

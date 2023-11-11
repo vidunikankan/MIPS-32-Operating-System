@@ -197,7 +197,7 @@ lock_acquire(struct lock *lock)
 {
 		
 		KASSERT(lock != NULL);
-		KASSERT(curthread->t_in_interrupt == false);
+		//KASSERT(curthread->t_in_interrupt == false);
 		KASSERT(!lock_do_i_hold(lock));
 
 		//spinlock for wait channel

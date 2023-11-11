@@ -71,8 +71,17 @@ struct proc {
 
 	struct lock *fd_lock;
 	struct file_info *fd[__OPEN_MAX];
+	
+	pid_t pid;
 	/* add more material here as needed */
 };
+
+struct pid_entry{
+	struct proc *proc;
+	struct lock *pid_lock;
+};
+
+struct pid_entry *pid_entry_create(void);
 
 struct file_info *fd_create(void);
 
@@ -81,6 +90,7 @@ void fd_destroy(struct file_info *fd);
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
 
+struct proc* proc_fork(const char *name);
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);
 

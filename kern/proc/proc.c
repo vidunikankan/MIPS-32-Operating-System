@@ -52,10 +52,31 @@
 #include <kern/unistd.h>
 #include <kern/fcntl.h>
 #include <vfs.h>
+#include <limits.h>
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
+struct pid_entry*  pids[10];
+
+struct pid_entry *pid_entry_create(void){
+	struct pid_entry *pe = (struct pid_entry*)kmalloc(sizeof(struct pid_entry));	
+	if(pe == NULL){
+		return NULL;
+
+	}
+	
+	pe->proc = NULL;
+	pe->pid_lock = lock_create("pid");
+	
+	if(pe->pid_lock == NULL){
+		kfree(pe);
+		return NULL;
+	}
+	
+	return pe;
+
+}
 
 struct file_info *fd_create(void){
 
@@ -93,11 +114,35 @@ struct proc *
 proc_create(const char *name)
 {
 	struct proc *proc;
-
+	pid_t i;
 	proc = kmalloc(sizeof(*proc));
 	if (proc == NULL) {
 		return NULL;
 	}
+
+	//KASSERT(pid_lock != NULL);
+
+	for(i = 0; i < 10; i++){
+		lock_acquire(pids[i]->pid_lock);
+		if(pids[i]->proc == NULL) {
+				proc->pid = i;
+				pids[i]->proc = proc;
+				
+				lock_release(pids[i]->pid_lock);
+				break;
+		}
+		lock_release(pids[i]->pid_lock);
+
+	}
+	//Add a check to see if "i" has reached open_max
+		/*if(i == __OPEN_MAX){
+			//NOTE: figure out how to return ENOMEM in this case
+			kfree(proc);
+			lock_release(pid_lock);
+			return NULL;
+		}*/
+	
+
 	proc->p_name = kstrdup(name);
 	if (proc->p_name == NULL) {
 		kfree(proc);
@@ -124,13 +169,18 @@ proc_create(const char *name)
 
 	return proc;
 }
-
+struct proc* proc_fork(const char* name){
+	struct proc* proc;
+	proc =proc_create(name);
+	return proc;
+}
 /*
  * Destroy a proc structure.
  *
  * Note: nothing currently calls this. Your wait/exit code will
  * probably want to do so.
  */
+
 void
 proc_destroy(struct proc *proc)
 {
@@ -223,7 +273,15 @@ proc_destroy(struct proc *proc)
  */
 void
 proc_bootstrap(void)
-{
+{	
+		
+	for(int i = 0; i < 10; i++){
+		pids[i] = pid_entry_create();
+		if(pids[i] == NULL){
+			panic("pid entry create failed\n");
+		}
+	}
+
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
