@@ -21,7 +21,13 @@
 
 
 pid_t sys_getpid(){
-	if (curproc == NULL) {return -1;}
+	lock_acquire(pid_lock);
+	if (curproc == NULL) {
+		lock_release(pid_lock);
+		return -1;
+	}
+
+	lock_release(pid_lock);
 	return curproc->pid;
 }
 
@@ -44,11 +50,16 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 		return EMPROC;
 	}
 
+	lock_acquire(p_table[child->pid]->pid_lock);
+	pid_parent[child->pid] = curproc->pid;
+	lock_release(p_table[child->pid]->pid_lock);
+
 	//Not sure about this
 	result = as_copy(curproc->p_addrspace, &(child->p_addrspace));
 	if (result){
 		kfree(child_tf);
 		proc_destroy(child);
+		pid_parent[child->pid] = -1;
 		return result;
 	}
 
@@ -77,6 +88,7 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 	result = thread_fork(child->p_name, child, enter_fork, (void*)child_tf, 0);
 	if (result){
 		//NOTE: might need to destroy child addrspace here
+		pid_parent[child->pid] = -1;
 		kfree(child_tf);
 		proc_destroy(child);
 		return result;
@@ -91,6 +103,71 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 
 	*retval = child->pid;
 	return 0;
+}
 
+int sys_waitpid(pid_t pid, int *status, int options) {
+	if (options != 0) {return EINVAL;}
+	if (pid < PID_MIN
+		|| pid > PID_MAX
+		|| pid_status[pid] == 0)
+	{
+		return ESRCH;
+	}
+
+	bool child = false;
+
+	if (p_table[pid] != NULL) {
+		if (pid_parent[pid] == curproc->pid) {child = true;}
+	}
+
+	if (child) {return ECHILD;}
+
+	int waitcode;
+
+	lock_acquire(pid_lock);
+	while (pid_status[pid] != 2) {
+		cv_wait(pid_cv, pid_lock);
+	}
+
+	waitcode = pid_waitcode[pid];
+	lock_release(pid_lock);
+
+	if (status != NULL) {
+		int result = copyout(&waitcode, (userptr_t) status, sizeof(int));
+		if (result){return result;}
+	}
+
+	return 0;
+}
+
+void sys__exit(int exitcode) {
+	int parent = curproc->pid;
+
+	// RUNNING = 1
+	// ZOMBIE = 2
+	// ORPHAN = 3
+	lock_acquire(pid_lock);
+	// Update children
+	for (int i = 0; i < PID_MAX; i++) {
+		if (pid_parent[i] == parent) {
+			if (pid_status[i] == 1) {pid_status[i] = 3;}
+			else if (pid_status[i] == 2) {
+				pid_destroy(p_table[i]);
+			} else {
+				panic("Forget to update somewhere");
+			}
+		}
+	}
+
+	if (pid_status[parent] == 1) {
+		pid_status[parent] = 2;
+		pid_waitcode[parent] = exitcode;
+	} else if (pid_status[parent] == 3) {
+		pid_destroy(p_table[parent]);
+	}
+
+	cv_broadcast(pid_cv, pid_lock);
+	lock_release(pid_lock);
+	thread_exit();
 }
 

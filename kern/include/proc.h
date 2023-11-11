@@ -71,21 +71,31 @@ struct proc {
 
 	struct lock *fd_lock;
 	struct file_info *fd[__OPEN_MAX];
-	
+
 	pid_t pid;
 	/* add more material here as needed */
 };
 
 struct pid_entry{
+	pid_t pid;
 	struct proc *proc;
 	struct lock *pid_lock;
 };
+
+struct pid_entry *p_table[PID_MAX];
+int pid_status[__PID_MAX];
+int pid_parent[__PID_MAX];
+int pid_waitcode[__PID_MAX];
+struct cv* pid_cv;
+
+struct lock *pid_lock;
 
 struct pid_entry *pid_entry_create(void);
 
 struct file_info *fd_create(void);
 
 void fd_destroy(struct file_info *fd);
+void pid_destroy(struct pid_entry *ptr);
 
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;

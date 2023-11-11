@@ -61,6 +61,8 @@ struct lock *pid_lock;
 //struct pid_entry*  pids[10];
 pid_t pid_counter;
 int pid_status[__PID_MAX];
+int pid_parent[__PID_MAX];
+int pid_waitcode[__PID_MAX];
 
 struct pid_entry *pid_entry_create(void){
 	struct pid_entry *pe = (struct pid_entry*)kmalloc(sizeof(struct pid_entry));
@@ -70,6 +72,7 @@ struct pid_entry *pid_entry_create(void){
 
 	pe->proc = NULL;
 	pe->pid_lock = lock_create("pid");
+	pe->pid = -1;
 
 	if (pe->pid_lock == NULL){
 		kfree(pe);
@@ -101,6 +104,18 @@ struct file_info *fd_create(void){
 	return fd;
 }
 
+void pid_destroy(struct pid_entry *ptr) {
+	if (ptr != NULL) {
+		int pid = ptr->pid;
+		lock_destroy(ptr->pid_lock);
+		proc_destroy(ptr->proc);
+		pid_status[pid] = 0;
+		pid_parent[pid] = -1;
+		pid_waitcode[pid] = -1;
+		kfree(ptr);
+	}
+}
+
 void fd_destroy(struct file_info *fd){
 	KASSERT(fd != NULL);
 	lock_destroy(fd->fd_lock);
@@ -120,7 +135,7 @@ proc_create(const char *name)
 	if (proc == NULL) {
 		return NULL;
 	}
-
+	proc->pid = -1;
 	//KASSERT(pid_lock != NULL);
 	lock_acquire(pid_lock);
 	for(i = 0; i < __PID_MAX; i++){
@@ -136,6 +151,15 @@ proc_create(const char *name)
 		if(pid_status[i] == 0){
 			proc->pid = i;
 			pid_status[i] = 1;
+			p_table[i] = pid_entry_create();
+
+			if (p_table[i] == NULL) {
+				kfree(proc);
+				return NULL;
+			}
+
+			p_table[i]->proc = proc;
+			p_table[i]->pid = i;
 			break;
 		}
 	}
@@ -151,7 +175,8 @@ proc_create(const char *name)
 
 
 	proc->p_name = kstrdup(name);
-	if (proc->p_name == NULL) {
+	if (proc->p_name == NULL || proc->pid == -1) {
+		pid_destroy(p_table[proc->pid]);
 		kfree(proc);
 		return NULL;
 	}
@@ -167,6 +192,7 @@ proc_create(const char *name)
 
 	proc->fd_lock = lock_create("proc lock");
 	if (proc->fd_lock == NULL){
+		pid_destroy(p_table[proc->pid]);
 		kfree(proc);
 		return NULL;
 	}
@@ -294,8 +320,12 @@ proc_bootstrap(void)
 			panic("pid entry create failed\n");
 		}*/
 		pid_status[i] = 0;
+		pid_parent[i] = -1;
+		pid_waitcode[i] = -1;
 	}
 	lock_release(pid_lock);
+
+	pid_cv = cv_create("pid cv");
 
 	kproc = proc_create("[kernel]");
 	if (kproc == NULL) {

@@ -11,3 +11,7 @@
 pid_t sys_getpid(void);
 
 int sys_fork(struct trapframe*, int *retval);
+
+int sys_waitpid(pid_t pid, int *status, int options);
+
+void sys__exit(int exitcode);

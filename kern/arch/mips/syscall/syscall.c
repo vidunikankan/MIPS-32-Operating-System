@@ -119,7 +119,6 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_open:
-
 			err = sys_open((userptr_t)tf->tf_a0, (int)tf->tf_a1, &retval);
 			break;
 
@@ -153,14 +152,25 @@ syscall(struct trapframe *tf)
 		case SYS_dup2:
 			err = sys_dup2((int) tf->tf_a0, (int) tf->tf_a1, &retval);
 			break;
-		
+
 		case SYS_fork:
 			err = sys_fork(tf, &retval);
 			break;
 
 		case SYS_getpid:
 			retval = sys_getpid();
-			err = 0;
+			if (retval > 0) {err = 0;}
+			else {err = EINVAL;}
+
+			break;
+
+		case SYS_waitpid:
+			err = sys_waitpid((int)tf->tf_a0, (int *) tf->tf_a1, (int) tf->tf_a2);
+			break;
+
+		case SYS__exit:
+			sys__exit((int)tf->tf_a0);
+			panic("return from exit");
 			break;
 
 		default:
@@ -209,16 +219,11 @@ syscall(struct trapframe *tf)
  */
 void
 enter_forked_process(struct trapframe *tf, struct addrspace *as)
-{	
-	if(as == 0){
-	struct trapframe new_tf;
-	new_tf.tf_status = tf->tf_status;
-	new_tf.tf_epc = tf->tf_epc;
-	new_tf.tf_a0 = tf->tf_a0;
-	new_tf.tf_a1 = tf->tf_a1;
-	new_tf.tf_a2 = tf->tf_a2;
-	new_tf.tf_sp = tf->tf_sp;
-	
-	mips_usermode(&new_tf);
-	}
+{
+	(void) as;
+	void *new_tf = (void *) curthread->t_stack + sizeof(struct trapframe);
+	memcpy(new_tf, (const void *) tf, sizeof(struct trapframe));
+
+	as_activate();
+	mips_usermode(new_tf);
 }
