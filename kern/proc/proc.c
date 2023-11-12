@@ -268,12 +268,12 @@ proc_destroy(struct proc *proc)
 		if (proc == curproc) {
 			as = proc_setas(NULL);
 			as_deactivate();
-		}
-		else {
+		} else {
 			as = proc->p_addrspace;
 			proc->p_addrspace = NULL;
 		}
-		as_destroy(as);
+
+		(void) as;
 	}
 
 	threadarray_cleanup(&proc->p_threads);
@@ -286,25 +286,25 @@ proc_destroy(struct proc *proc)
 		if(proc->fd[i] == NULL){
 			continue;
 		} else {
-		fd_destroy(proc->fd[i]);
-		proc->fd[i] = NULL;
-
-
-			/*int count;
 			struct file_info *fhandle = proc->fd[i];
+			lock_acquire(fhandle->fd_lock);
 
-			lock_acquire(proc->fd[i]->fd_lock);
-				count = proc->fd[i]->ref_count -1;
-				if(count <= 0){
-					vfs_close(proc->fd[i]->file);
-				}
-				proc->fd[i]->ref_count--;
-				proc->fd[i] = NULL;
-			lock_release(proc->fd[i]->fd_lock);
+			int count = fhandle->ref_count - 1;
 
-			fd_destroy(fhandle);*/
+			if (count <= 0) {
+				vfs_close(fhandle->file);
+			}
+
+			fhandle->ref_count = count;
+			proc->fd[i] = NULL;
+
+			lock_release(fhandle->fd_lock);
+
+			if (count <= 0) {
+				fd_destroy(fhandle);
+			}
+			proc->fd[i] = NULL;
 		}
-
 	}
 
 	kfree(proc->p_name);

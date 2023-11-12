@@ -156,7 +156,7 @@ void sys__exit(int exitcode) {
 					pid_status[i] = ORPHAN;
 				//if dead,
 				} else if (pid_status[i] == ZOMBIE) {
-					// proc_destroy(p_table[i]->proc);
+					proc_destroy(p_table[i]->proc);
 					pid_destroy(p_table[i]);
 					p_table[i] = NULL;
 				} else {
@@ -173,7 +173,7 @@ void sys__exit(int exitcode) {
 
 	//If orphaned, just destroy entry since no one is waiting on exitcode
 	} else if (pid_status[parent] == ORPHAN) {
-		// proc_destroy(p_table[parent]->proc);
+		proc_destroy(p_table[parent]->proc);
 		pid_destroy(p_table[parent]);
 		p_table[parent] = NULL;
 	}
