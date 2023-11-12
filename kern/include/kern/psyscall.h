@@ -15,3 +15,7 @@ int sys_fork(struct trapframe*, int *retval);
 int sys_waitpid(pid_t pid, int *status, int options);
 
 void sys__exit(int exitcode);
+
+void sys_execv(const char *, char **, int *);
+
+int get_size(char*);

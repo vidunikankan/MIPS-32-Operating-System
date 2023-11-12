@@ -71,6 +71,7 @@ struct proc {
 
 	struct lock *fd_lock;
 	struct file_info *fd[__OPEN_MAX];
+	
 
 	pid_t pid;
 	/* add more material here as needed */

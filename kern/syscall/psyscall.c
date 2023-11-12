@@ -207,3 +207,137 @@ void sys__exit(int exitcode) {
 	thread_exit();
 }
 
+void sys_execv(const char *uprogram, char **uargs, int *retval){
+	
+	char **kargv = (char**)kmalloc(ARG_MAX);
+	char *prog = (char*)kmalloc(PATH_MAX);
+	size_t i = 0;
+	int result;
+	//char *cur_ustr = NULL;
+	//char *kargv_ptr = kargv[i+1];
+	size_t ustr_size = 0;
+	size_t path_size = 0;
+	size_t actual = 0;
+	size_t MIPS_ADDR = 32;
+	size_t total_buf_size = 0;
+	size_t j = 0;
+	struct vnode *v;
+	vaddr_t entrypoint, user_stack;
+	struct addrspace *as;
+	
+	if(uprogram == NULL){
+		*retval = EFAULT;
+		return;
+	}
+	
+	result= copyinstr((const_userptr_t)uprogram, prog, PATH_MAX, &path_size);
+	if(result){
+		kfree(kargv);
+		kfree(prog);
+		*retval = result;
+		return;
+	}
+	
+	while(uargs[j] != NULL){
+		result = copyin((const_userptr_t)&uargs[j], &kargv[j], MIPS_ADDR);
+		if(result){
+			kfree(kargv);
+			kfree(prog);
+			*retval = result;
+			return;
+		}
+		j++;
+	}
+
+	kargv[j] = NULL;
+	total_buf_size += j*sizeof(char*);
+	
+	for(i = 0; i < j; i++){
+		ustr_size = (size_t)get_size(uargs[i]);
+		result = copyinstr((const_userptr_t)uargs[i], kargv[i], ustr_size, &actual);
+		total_buf_size += actual;
+		//TODO: make sure kargv is aligned on 4-byte boundaries
+		if(result){
+			kfree(kargv);
+			kfree(prog);
+			*retval = result;
+			return;
+		}
+	}
+
+	result = vfs_open(prog, O_RDONLY, 0, &v); 
+	if(result){
+		kfree(kargv);
+		kfree(prog);
+		*retval = result;
+		return;
+	}
+	
+	as = as_create();
+	if(as == NULL){
+		vfs_close(v);
+		kfree(kargv);
+		kfree(prog);
+		*retval = ENOMEM;
+		return;
+	}
+	proc_setas(as);
+	as_activate();
+
+	result = load_elf(v, &entrypoint);
+	if(result){
+		vfs_close(v);
+		kfree(kargv);
+		kfree(prog);
+		*retval = result;
+		return;
+	}
+
+	vfs_close(v);
+
+	result = as_define_stack(as, &user_stack);
+	if(result){
+		kfree(kargv);
+		kfree(prog);
+		*retval = result;
+		return;
+	}
+	
+	size_t k = 0;
+	//start of arg buffer on user stack
+	vaddr_t user_buf = user_stack - total_buf_size;
+	while(kargv[k] != NULL){
+		kargv[k] = user_buf + kargv[k];
+		k++;
+	}
+	kargv[k] = NULL;
+	KASSERT(k == j);
+
+	result = copyout((const void*)kargv, (userptr_t)user_buf, total_buf_size);
+	if(result){
+		kfree(kargv);
+		kfree(prog);
+		*retval = result;
+		return;
+	}
+
+	kfree(kargv);
+	kfree(prog);
+
+	enter_new_process(j, (userptr_t)user_buf, NULL, user_stack, entrypoint); 
+
+	panic("enter_new_proc returned\n");
+	return;
+
+}
+
+int get_size (char * s) {
+    char * t; // first copy the pointer to not change the original
+    int size = 0;
+
+    for (t = s; *t != '\0'; t++) {
+        size++;
+    }
+
+    return size;
+}
