@@ -110,7 +110,7 @@ void pid_destroy(struct pid_entry *ptr) {
 		int pid = ptr->pid;
 		lock_destroy(ptr->pid_lock);
 		//proc_destroy(ptr->proc);
-		pid_status[pid] = 0;
+		pid_status[pid] = READY;
 		pid_parent[pid] = -1;
 		pid_waitcode[pid] = -1;
 		kfree(ptr);
@@ -137,18 +137,19 @@ proc_create(const char *name)
 		return NULL;
 	}
 	proc->pid = -1;
-	
+
 	lock_acquire(pid_lock);
 	for(i = 0; i < __PID_MAX; i++){
-		
-		if(pid_status[i] == 0){
+
+		if(pid_status[i] == READY){
 			proc->pid = i;
-			pid_status[i] = 1;
-			
+			pid_status[i] = RUNNING;
+
 			p_table[i] = pid_entry_create();
-			
+
 			if (p_table[i] == NULL) {
 				kfree(proc);
+				lock_release(pid_lock);
 				return NULL;
 			}
 
@@ -281,7 +282,7 @@ proc_destroy(struct proc *proc)
 	lock_destroy(proc->fd_lock);
 
 	for(int i = 0; i < __OPEN_MAX; i++){
-		
+
 		if(proc->fd[i] == NULL){
 			continue;
 		} else {
@@ -327,7 +328,7 @@ proc_bootstrap(void)
 		if(pids[i] == NULL){
 			panic("pid entry create failed\n");
 		}*/
-		pid_status[i] = 0;
+		pid_status[i] = READY;
 		pid_parent[i] = -1;
 		pid_waitcode[i] = -1;
 	}

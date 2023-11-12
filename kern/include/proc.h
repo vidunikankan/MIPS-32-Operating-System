@@ -42,6 +42,11 @@
 struct addrspace;
 struct vnode;
 
+#define READY 0
+#define RUNNING 1
+#define ZOMBIE 2
+#define ORPHAN 3
+
 /*
  * File descriptor structure
  */
@@ -71,7 +76,7 @@ struct proc {
 
 	struct lock *fd_lock;
 	struct file_info *fd[__OPEN_MAX];
-	
+
 
 	pid_t pid;
 	/* add more material here as needed */
