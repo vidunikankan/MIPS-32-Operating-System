@@ -799,6 +799,10 @@ thread_exit(void)
 	 */
 	proc_remthread(cur);
 
+	if(pid_status[cur->t_proc->pid] == 0){
+		proc_destroy(cur->t_proc);
+	}
+	cur->t_proc = NULL;
 	/* Make sure we *are* detached (move this only if you're sure!) */
 	KASSERT(cur->t_proc == NULL);
 

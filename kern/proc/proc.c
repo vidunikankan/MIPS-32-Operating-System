@@ -60,6 +60,7 @@ struct proc *kproc;
 struct lock *pid_lock;
 //struct pid_entry*  pids[10];
 pid_t pid_counter;
+struct pid_entry *p_table[__PID_MAX];
 int pid_status[__PID_MAX];
 int pid_parent[__PID_MAX];
 int pid_waitcode[__PID_MAX];
@@ -108,7 +109,7 @@ void pid_destroy(struct pid_entry *ptr) {
 	if (ptr != NULL) {
 		int pid = ptr->pid;
 		lock_destroy(ptr->pid_lock);
-		proc_destroy(ptr->proc);
+		//proc_destroy(ptr->proc);
 		pid_status[pid] = 0;
 		pid_parent[pid] = -1;
 		pid_waitcode[pid] = -1;
@@ -136,23 +137,16 @@ proc_create(const char *name)
 		return NULL;
 	}
 	proc->pid = -1;
-	//KASSERT(pid_lock != NULL);
+	
 	lock_acquire(pid_lock);
 	for(i = 0; i < __PID_MAX; i++){
-		/*lock_acquire(pids[i]->pid_lock);
-		if(pids[i]->proc == NULL) {
-				proc->pid = i;
-				pids[i]->proc = proc;
-
-				lock_release(pids[i]->pid_lock);
-				break;
-		}
-		lock_release(pids[i]->pid_lock);*/
+		
 		if(pid_status[i] == 0){
 			proc->pid = i;
 			pid_status[i] = 1;
+			
 			p_table[i] = pid_entry_create();
-
+			
 			if (p_table[i] == NULL) {
 				kfree(proc);
 				return NULL;
@@ -164,14 +158,6 @@ proc_create(const char *name)
 		}
 	}
 	lock_release(pid_lock);
-
-	//Add a check to see if "i" has reached open_max
-		/*if(i == __OPEN_MAX){
-			//NOTE: figure out how to return ENOMEM in this case
-			kfree(proc);
-			lock_release(pid_lock);
-			return NULL;
-		}*/
 
 
 	proc->p_name = kstrdup(name);
@@ -295,7 +281,29 @@ proc_destroy(struct proc *proc)
 	lock_destroy(proc->fd_lock);
 
 	for(int i = 0; i < __OPEN_MAX; i++){
-		KASSERT(proc->fd[i] == NULL);
+		
+		if(proc->fd[i] == NULL){
+			continue;
+		} else {
+		fd_destroy(proc->fd[i]);
+		proc->fd[i] = NULL;
+
+
+			/*int count;
+			struct file_info *fhandle = proc->fd[i];
+
+			lock_acquire(proc->fd[i]->fd_lock);
+				count = proc->fd[i]->ref_count -1;
+				if(count <= 0){
+					vfs_close(proc->fd[i]->file);
+				}
+				proc->fd[i]->ref_count--;
+				proc->fd[i] = NULL;
+			lock_release(proc->fd[i]->fd_lock);
+
+			fd_destroy(fhandle);*/
+		}
+
 	}
 
 	kfree(proc->p_name);
@@ -470,7 +478,7 @@ proc_remthread(struct thread *t)
 			threadarray_remove(&proc->p_threads, i);
 			spinlock_release(&proc->p_lock);
 			spl = splhigh();
-			t->t_proc = NULL;
+			//t->t_proc = NULL;
 			splx(spl);
 			return;
 		}
