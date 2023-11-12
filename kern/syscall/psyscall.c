@@ -254,7 +254,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	
 	for(i = 0; i < j; i++){
 		ustr_size = (size_t)get_size(uargs[i]);
-		result = copyinstr((const_userptr_t)uargs[i], kargv[i], ustr_size, &actual);
+		result = copyinstr((const_userptr_t)(uargs[i]), (kargv[i]), (ustr_size + 1), &actual);
 		total_buf_size += actual;
 		//TODO: make sure kargv is aligned on 4-byte boundaries
 		if(result){

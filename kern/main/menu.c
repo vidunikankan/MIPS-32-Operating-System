@@ -40,6 +40,7 @@
 #include <vfs.h>
 #include <sfs.h>
 #include <syscall.h>
+#include <kern/psyscall.h>
 #include <test.h>
 #include "opt-synchprobs.h"
 #include "opt-sfs.h"
@@ -115,6 +116,7 @@ common_prog(int nargs, char **args)
 {
 	struct proc *proc;
 	int result;
+	int status;
 
 #if OPT_SYNCHPROBS
 	kprintf("Warning: this probably won't work with a "
@@ -131,11 +133,18 @@ common_prog(int nargs, char **args)
 			proc /* new process */,
 			cmd_progthread /* thread function */,
 			args /* thread arg */, nargs /* thread arg */);
+
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		proc_destroy(proc);
 		return result;
 	}
+	
+	result = sys_waitpid(proc->pid, &status, 0);
+	if(result){
+		return result;
+	}
+
 
 	/*
 	 * The new process will be destroyed when the program exits...
