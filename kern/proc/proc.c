@@ -110,7 +110,7 @@ void pid_destroy(struct pid_entry *ptr) {
 		int pid = ptr->pid;
 		lock_destroy(ptr->pid_lock);
 		//proc_destroy(ptr->proc);
-		pid_status[pid] = 0;
+		pid_status[pid] = READY;
 		pid_parent[pid] = -1;
 		pid_waitcode[pid] = -1;
 		kfree(ptr);
@@ -137,18 +137,19 @@ proc_create(const char *name)
 		return NULL;
 	}
 	proc->pid = -1;
-	
+
 	lock_acquire(pid_lock);
 	for(i = 0; i < __PID_MAX; i++){
-		
-		if(pid_status[i] == 0){
+
+		if(pid_status[i] == READY){
 			proc->pid = i;
-			pid_status[i] = 1;
-			
+			pid_status[i] = RUNNING;
+
 			p_table[i] = pid_entry_create();
-			
+
 			if (p_table[i] == NULL) {
 				kfree(proc);
+				lock_release(pid_lock);
 				return NULL;
 			}
 
@@ -267,12 +268,12 @@ proc_destroy(struct proc *proc)
 		if (proc == curproc) {
 			as = proc_setas(NULL);
 			as_deactivate();
-		}
-		else {
+		} else {
 			as = proc->p_addrspace;
 			proc->p_addrspace = NULL;
 		}
-		as_destroy(as);
+
+		(void) as;
 	}
 
 	threadarray_cleanup(&proc->p_threads);
@@ -281,29 +282,29 @@ proc_destroy(struct proc *proc)
 	lock_destroy(proc->fd_lock);
 
 	for(int i = 0; i < __OPEN_MAX; i++){
-		
+
 		if(proc->fd[i] == NULL){
 			continue;
 		} else {
-		fd_destroy(proc->fd[i]);
-		proc->fd[i] = NULL;
-
-
-			/*int count;
 			struct file_info *fhandle = proc->fd[i];
+			lock_acquire(fhandle->fd_lock);
 
-			lock_acquire(proc->fd[i]->fd_lock);
-				count = proc->fd[i]->ref_count -1;
-				if(count <= 0){
-					vfs_close(proc->fd[i]->file);
-				}
-				proc->fd[i]->ref_count--;
-				proc->fd[i] = NULL;
-			lock_release(proc->fd[i]->fd_lock);
+			int count = fhandle->ref_count - 1;
 
-			fd_destroy(fhandle);*/
+			if (count <= 0) {
+				vfs_close(fhandle->file);
+			}
+
+			fhandle->ref_count = count;
+			proc->fd[i] = NULL;
+
+			lock_release(fhandle->fd_lock);
+
+			if (count <= 0) {
+				fd_destroy(fhandle);
+			}
+			proc->fd[i] = NULL;
 		}
-
 	}
 
 	kfree(proc->p_name);
@@ -327,7 +328,7 @@ proc_bootstrap(void)
 		if(pids[i] == NULL){
 			panic("pid entry create failed\n");
 		}*/
-		pid_status[i] = 0;
+		pid_status[i] = READY;
 		pid_parent[i] = -1;
 		pid_waitcode[i] = -1;
 	}

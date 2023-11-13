@@ -51,7 +51,11 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 	}
 
 	lock_acquire(p_table[child->pid]->pid_lock);
-	pid_parent[child->pid] = curproc->pid;
+	if (pid_parent[child->pid] == -1) {
+		pid_parent[child->pid] = curproc->pid;
+	} else {
+		panic("Already exists parent for this process");
+	}
 	lock_release(p_table[child->pid]->pid_lock);
 
 	//Not sure about this
@@ -106,54 +110,33 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 }
 
 int sys_waitpid(pid_t pid, int *status, int options) {
-	int waitcode;
-	bool is_child;
+	int exitcode;
+	bool is_child = pid_parent[pid] == curproc->pid ? true : false;
+
+	//Check is curproc is parent
+	if (is_child == false) {return ECHILD;}
 
 	//Invalid argument
 	if (options != 0) {return EINVAL;}
-	
+
 	//PID arg not in bounds
-	if (pid < __PID_MIN
+	if (pid_status[pid] == READY
+		|| pid < __PID_MIN
 		|| pid > __PID_MAX)
 	{
 		return ESRCH;
 	}
-	
-	//Proc doesn't exist for PID
-	lock_acquire(pid_lock);
-		if(pid_status[pid] == 0){
-			lock_release(pid_lock);
-			return ESRCH;
-		}
-	lock_release(pid_lock);
-
-
-	is_child = false;
-
-	//Check is curproc is parent
-	if (p_table[pid] != NULL) {
-
-	lock_acquire(p_table[pid]->pid_lock);
-		if (pid_parent[pid] == curproc->pid){
-			is_child = true;
-		}
-	lock_release(p_table[pid]->pid_lock);
-	
-	}
-
-	if (is_child == false) {return ECHILD;}
-
 
 	lock_acquire(pid_lock);
-	while (pid_status[pid] != 2) {
+	while (pid_status[pid] != ZOMBIE) {
 		cv_wait(pid_cv, pid_lock);
 	}
 
-	waitcode = pid_waitcode[pid];
+	exitcode = pid_waitcode[pid];
 	lock_release(pid_lock);
 
 	if (status != NULL) {
-		int result = copyout(&waitcode, (userptr_t) status, sizeof(int));
+		int result = copyout(&exitcode, (userptr_t) status, sizeof(int));
 		if (result){return result;}
 	}
 
@@ -163,41 +146,34 @@ int sys_waitpid(pid_t pid, int *status, int options) {
 void sys__exit(int exitcode) {
 	int parent = curproc->pid;
 
-	// RUNNING = 1
-	// ZOMBIE = 2
-	// ORPHAN = 3
 	lock_acquire(pid_lock);
 	// Update children
 	for (int i = 0; i < PID_MAX; i++) {
-		bool is_child = false;
-		if(p_table[i] != NULL){
-			lock_acquire(p_table[i]->pid_lock);
+		if (p_table[i] != NULL){
 			if (pid_parent[i] == parent){
-				is_child = true;
-			}
-			lock_release(p_table[i]->pid_lock);
-		}
-		if (is_child) {
-			//if running, now orphan
-			if (pid_status[i] == 1){
-			pid_status[i] = 3;
-			//if dead, 
-			} else if (pid_status[i] == 2) {
-				pid_destroy(p_table[i]);
-				p_table[i] = NULL;
-			} else {
-				panic("Forget to update somewhere");
+				//if running, now orphan
+				if (pid_status[i] == RUNNING){
+					pid_status[i] = ORPHAN;
+				//if dead,
+				} else if (pid_status[i] == ZOMBIE) {
+					proc_destroy(p_table[i]->proc);
+					pid_destroy(p_table[i]);
+					p_table[i] = NULL;
+				} else {
+					panic("Forget to update somewhere");
+				}
 			}
 		}
 	}
-	
+
 	//If parent still alive, update exitcode
-	if (pid_status[parent] == 1) {
-		pid_status[parent] = 2;
+	if (pid_status[parent] == RUNNING) {
+		pid_status[parent] = ZOMBIE;
 		pid_waitcode[parent] = exitcode;
 
 	//If orphaned, just destroy entry since no one is waiting on exitcode
-	} else if (pid_status[parent] == 3) {
+	} else if (pid_status[parent] == ORPHAN) {
+		proc_destroy(p_table[parent]->proc);
 		pid_destroy(p_table[parent]);
 		p_table[parent] = NULL;
 	}
@@ -208,7 +184,7 @@ void sys__exit(int exitcode) {
 }
 
 void sys_execv(const char *uprogram, char **uargs, int *retval){
-	
+
 	char **kargv = (char**)kmalloc(ARG_MAX);
 	char *prog = (char*)kmalloc(PATH_MAX);
 	uint32_t follower;
@@ -224,11 +200,12 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	struct addrspace *as;
 	
 	
+
 	if(uprogram == NULL){
 		*retval = EFAULT;
 		return;
 	}
-	
+
 	result= copyinstr((const_userptr_t)uprogram, prog, PATH_MAX, &path_size);
 	if(result){
 		kfree(kargv);
@@ -261,6 +238,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		//Checking alignment
 		while(temp % 4 != 0){
 			temp += 1;
+
 		}
 
 		kargv[j] = (char *)temp;
@@ -270,6 +248,8 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 
 	kargv[j] = NULL;
 	
+	total_buf_size += j*sizeof(char*);
+
 	for(i = 0; i < j; i++){
 		ustr_size = (size_t)get_size(uargs[i]);
 		ustr_size++;
@@ -288,14 +268,14 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		}
 	}
 
-	result = vfs_open(prog, O_RDONLY, 0, &v); 
+	result = vfs_open(prog, O_RDONLY, 0, &v);
 	if(result){
 		kfree(kargv);
 		kfree(prog);
 		*retval = result;
 		return;
 	}
-	
+
 	as = as_create();
 	if(as == NULL){
 		vfs_close(v);
@@ -356,7 +336,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	kfree(prog);
 	user_stack = user_buf;
 
-	enter_new_process(j, (userptr_t)user_buf, NULL, user_stack, entrypoint); 
+	enter_new_process(j, (userptr_t)user_buf, NULL, user_stack, entrypoint);
 
 	panic("enter_new_proc returned\n");
 	return;
