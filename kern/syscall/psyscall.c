@@ -337,6 +337,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 
 	/*uint32_t stack = (size_t)user_stack;
+	ysser_stack = user_buf - total_buf_size;
 	while(stack %4 != 0){
 		stack++;
 	}
@@ -345,24 +346,23 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	size_t k = 0;
 	//start of arg buffer on user stack
 	vaddr_t user_buf = user_stack;
+	kargv[j] = NULL;
 	while(user_buf % 4 != 0){
 		user_buf+=1;
 	}
 	
-	user_buf = user_stack - total_buf_size;
-	while(kargv[k] != NULL){
+	user_buf = user_stack - total_buf_size -4;
+	while(k < j){
 		if(k == 0){
-		kargv[k] = (char*)((size_t)user_buf + kbuf_block_sizes[k]);
+		kargv[k] = (char*)((size_t)user_buf + l*sizeof(char*));
 		} else {
 		kargv[k] = (char*)((size_t)kargv[k-1] + kbuf_block_sizes[k]);
 		}
 		k++;
 	}
-	//kargv[k] = NULL;
-	
-	//KASSERT(k == j);
+		
 
-	result = copyout((const void*)kargv, (userptr_t)user_buf, total_buf_size);
+	result = copyout((const void*)kargv, (userptr_t)user_buf, (total_buf_size + 4));
 	if(result){
 		kfree(kargv);
 		kfree(prog);
@@ -372,6 +372,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 
 	kfree(kargv);
 	kfree(prog);
+	user_stack = user_buf;
 
 	enter_new_process(j, (userptr_t)user_buf, NULL, user_stack, entrypoint); 
 
