@@ -214,17 +214,16 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	uint32_t follower;
 	size_t i = 0;
 	int result;
-	//char *cur_ustr = NULL;
-	//char *kargv_ptr = kargv[i+1];
 	size_t ustr_size = 0;
 	size_t path_size = 0;
 	size_t actual = 0;
-	//size_t MIPS_ADDR = 32;
 	size_t total_buf_size = 0;
 	size_t j = 0;
 	struct vnode *v;
 	vaddr_t entrypoint, user_stack;
 	struct addrspace *as;
+	
+	
 	if(uprogram == NULL){
 		*retval = EFAULT;
 		return;
@@ -242,19 +241,17 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	while(uargs[l] != NULL){
 		l++;
 	}
-	total_buf_size += l*sizeof(char*);
+	
+	total_buf_size += l*sizeof(char*) + 4;
 	size_t kbuf_block_sizes[l];
 	
-	while(uargs[j] != NULL){
-		//result = copyin((const_userptr_t)&uargs[j], &kargv[j], MIPS_ADDR);
+	for(j = 0; j < l; j++){
 		
 		if(j > 0){	
-			kargv[j] = (char*)(follower + (size_t)get_size(uargs[j-1]));
-			//kbuf_block_sizes[j] = (size_t)get_size(kargv[j-1]);
-			//total_buf_size += (size_t)get_size(kargv[j-1]);	
+			kargv[j] = (char*)(follower + (size_t)get_size(uargs[j-1]) +1);
 		}else{
-			kargv[j] = (char*) ((uint32_t)&kargv[0] + l*sizeof(char*));
-			kbuf_block_sizes[j] = (size_t)l*sizeof(char*);
+			kargv[j] = (char*) ((uint32_t)&kargv[0] + l*sizeof(char*) +4);
+			kbuf_block_sizes[j] = (size_t)l*sizeof(char*) + 4;
 
 		}
 
@@ -265,16 +262,10 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		while(temp % 4 != 0){
 			temp += 1;
 		}
+
 		kargv[j] = (char *)temp;
 		follower = (size_t)kargv[j];
 
-		if(result){
-			kfree(kargv);
-			kfree(prog);
-			*retval = result;
-			return;
-		}
-		j++;
 	}
 
 	kargv[j] = NULL;
@@ -336,25 +327,16 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
-	/*uint32_t stack = (size_t)user_stack;
-	ysser_stack = user_buf - total_buf_size;
-	while(stack %4 != 0){
-		stack++;
-	}
-	user_stack = (vaddr_t)stack;
-	*/
 	size_t k = 0;
 	//start of arg buffer on user stack
 	vaddr_t user_buf = user_stack;
 	kargv[j] = NULL;
-	while(user_buf % 4 != 0){
-		user_buf+=1;
-	}
 	
 	user_buf = user_stack - total_buf_size -4;
+	//setting pointers on user stack
 	while(k < j){
 		if(k == 0){
-		kargv[k] = (char*)((size_t)user_buf + l*sizeof(char*));
+		kargv[k] = (char*)((size_t)user_buf + kbuf_block_sizes[k]);
 		} else {
 		kargv[k] = (char*)((size_t)kargv[k-1] + kbuf_block_sizes[k]);
 		}
@@ -362,7 +344,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 		
 
-	result = copyout((const void*)kargv, (userptr_t)user_buf, (total_buf_size + 4));
+	result = copyout((const void*)&kargv[0], (userptr_t)user_buf, (total_buf_size+4));
 	if(result){
 		kfree(kargv);
 		kfree(prog);
