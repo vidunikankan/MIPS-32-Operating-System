@@ -186,6 +186,7 @@ void sys__exit(int exitcode) {
 void sys_execv(const char *uprogram, char **uargs, int *retval){
 
 	char **kargv = (char**)kmalloc(ARG_MAX);
+	char **tempargs = (char**)kmalloc(ARG_MAX);
 	char *prog = (char*)kmalloc(PATH_MAX);
 	uint32_t follower;
 	size_t i = 0;
@@ -195,44 +196,92 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	size_t actual = 0;
 	size_t total_buf_size = 0;
 	size_t j = 0;
+	size_t ADDR_MIPS = 32;
 	struct vnode *v;
 	vaddr_t entrypoint, user_stack;
 	struct addrspace *as;
 	
-	
 
-	if(uprogram == NULL){
+	if(uprogram == NULL || uargs == NULL){
 		*retval = EFAULT;
 		return;
 	}
 
+	//copyin name 
 	result= copyinstr((const_userptr_t)uprogram, prog, PATH_MAX, &path_size);
 	if(result){
 		kfree(kargv);
+		kfree(tempargs);
+		kfree(prog);
+		*retval = result;
+		return;
+	}
+
+	size_t path_length;
+	path_length = (size_t)get_size(prog);
+	if(path_length == 0){
+		kfree(kargv);
+		kfree(tempargs);
+		kfree(prog);
+		*retval = EINVAL;
+		return;
+	}
+	
+	result = copyin((const_userptr_t)&uargs[0], &tempargs[0], ADDR_MIPS);
+	if(result){
+		kfree(kargv);
+		kfree(tempargs);
 		kfree(prog);
 		*retval = result;
 		return;
 	}
 	
+
+	size_t p = 0;
+	while(uargs[p] != NULL){
+		result = copyin((const_userptr_t) uargs[p], tempargs[p], ADDR_MIPS);
+		if(result){
+			kfree(kargv);
+			kfree(tempargs);
+			kfree(prog);
+			*retval = result;
+			return;
+		}
+		p++;
+	}
+
+		//counting number of args
 	size_t l = 0;
 	while(uargs[l] != NULL){
 		l++;
 	}
+
+	kfree(tempargs);
+
 	
+	//adding array pointer portion of kernel buffer to total size
 	total_buf_size += l*sizeof(char*) + 4;
+	
+	//init an array that holds kernel buffer block sizes
 	size_t kbuf_block_sizes[l];
 	
+	//packing in strings & setting pointers in kernel buffer accordingly
 	for(j = 0; j < l; j++){
 		
+		//if j != 0, we use follower pointer to set alignment
 		if(j > 0){	
+			//+1 because string is 0-term'd (size of 1 char)
 			kargv[j] = (char*)(follower + (size_t)get_size(uargs[j-1]) +1);
+		
+		//for j = 0, we must start from beginning of kernel buffer
 		}else{
+			//+4 because array is null-term'd (size of 1 char *)
 			kargv[j] = (char*) ((uint32_t)&kargv[0] + l*sizeof(char*) +4);
 			kbuf_block_sizes[j] = (size_t)l*sizeof(char*) + 4;
 
 		}
 
-		//4B boundary aligning
+		/*4B boundary aligning*/
 		uint32_t temp = (size_t)kargv[j];
 		
 		//Checking alignment
@@ -241,33 +290,43 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 
 		}
 
+		//setting buffer pointer & follower pointer for next iteration
 		kargv[j] = (char *)temp;
 		follower = (size_t)kargv[j];
 
 	}
 
+	//setting null-term
 	kargv[j] = NULL;
 	
-	total_buf_size += j*sizeof(char*);
-
+	//setting rest of block size array and copying in strings from user buffer
 	for(i = 0; i < j; i++){
+		//getting size of user string to pass into copinstr
 		ustr_size = (size_t)get_size(uargs[i]);
-		ustr_size++;
+		ustr_size++; //(+1 for 0-term)
+
 		if(i > 0){
 			kbuf_block_sizes[i] = (size_t)kargv[i] - (size_t)kargv[i-1];
-			total_buf_size += kbuf_block_sizes[i];	
+			total_buf_size += kbuf_block_sizes[i]; //need to account for 0-term
 		}
 		result = copyinstr((const_userptr_t)(uargs[i]), (kargv[i]), ustr_size, &actual);
-
-		//TODO: add 1 for each entry in kbuf size array, set very last value after 4
 		if(result){
 			kfree(kargv);
 			kfree(prog);
 			*retval = result;
 			return;
 		}
+
+		//need to do this, otherwise last argument's bytecount isn't added to total_buf_size
+		if(i == (j - 1)){
+			while(actual % 4 != 0){
+				actual++;
+			}
+			total_buf_size += actual;
+		}
 	}
 
+	//open program file
 	result = vfs_open(prog, O_RDONLY, 0, &v);
 	if(result){
 		kfree(kargv);
@@ -276,6 +335,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
+	//create new address space
 	as = as_create();
 	if(as == NULL){
 		vfs_close(v);
@@ -285,9 +345,11 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 	
+	//set new address space & activate
 	proc_setas(as);
 	as_activate();
 
+	//load elf exec
 	result = load_elf(v, &entrypoint);
 	if(result){
 		vfs_close(v);
@@ -297,8 +359,10 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
+	//close program file now
 	vfs_close(v);
 
+	//get user stack pointer
 	result = as_define_stack(as, &user_stack);
 	if(result){
 		kfree(kargv);
@@ -308,12 +372,13 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 
 	size_t k = 0;
-	//start of arg buffer on user stack
-	vaddr_t user_buf = user_stack;
+	vaddr_t user_buf;
 	kargv[j] = NULL;
 	
-	user_buf = user_stack - total_buf_size -4;
-	//setting pointers on user stack
+	//stack grows down, so we minus kernel buf size from top of stack to get user buffer pointer
+	user_buf = user_stack - total_buf_size;
+
+	//setting pointers on user stack before we copy out
 	while(k < j){
 		if(k == 0){
 		kargv[k] = (char*)((size_t)user_buf + kbuf_block_sizes[k]);
@@ -324,7 +389,8 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 		
 
-	result = copyout((const void*)&kargv[0], (userptr_t)user_buf, (total_buf_size+4));
+	//copyout kernel buffer into user stack all in one chunk
+	result = copyout((const void*)&kargv[0], (userptr_t)user_buf, (total_buf_size));
 	if(result){
 		kfree(kargv);
 		kfree(prog);
@@ -332,10 +398,14 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
+	//free heap mem
 	kfree(kargv);
 	kfree(prog);
+
+	//set user stack pointer
 	user_stack = user_buf;
 
+	//enter process
 	enter_new_process(j, (userptr_t)user_buf, NULL, user_stack, entrypoint);
 
 	panic("enter_new_proc returned\n");
@@ -344,7 +414,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 }
 
 int get_size (char * s) {
-    char * t; // first copy the pointer to not change the original
+    char * t; 
     int size = 0;
 
     for (t = s; *t != '\0'; t++) {
