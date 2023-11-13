@@ -211,6 +211,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	
 	char **kargv = (char**)kmalloc(ARG_MAX);
 	char *prog = (char*)kmalloc(PATH_MAX);
+	uint32_t follower;
 	size_t i = 0;
 	int result;
 	//char *cur_ustr = NULL;
@@ -218,13 +219,12 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	size_t ustr_size = 0;
 	size_t path_size = 0;
 	size_t actual = 0;
-	size_t MIPS_ADDR = 32;
+	//size_t MIPS_ADDR = 32;
 	size_t total_buf_size = 0;
 	size_t j = 0;
 	struct vnode *v;
 	vaddr_t entrypoint, user_stack;
 	struct addrspace *as;
-	
 	if(uprogram == NULL){
 		*retval = EFAULT;
 		return;
@@ -238,8 +238,36 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 	
+	size_t l = 0;
+	while(uargs[l] != NULL){
+		l++;
+	}
+	total_buf_size += l*sizeof(char*);
+	size_t kbuf_block_sizes[l];
+	
 	while(uargs[j] != NULL){
-		result = copyin((const_userptr_t)&uargs[j], &kargv[j], MIPS_ADDR);
+		//result = copyin((const_userptr_t)&uargs[j], &kargv[j], MIPS_ADDR);
+		
+		if(j > 0){	
+			kargv[j] = (char*)(follower + (size_t)get_size(uargs[j-1]));
+			//kbuf_block_sizes[j] = (size_t)get_size(kargv[j-1]);
+			//total_buf_size += (size_t)get_size(kargv[j-1]);	
+		}else{
+			kargv[j] = (char*) ((uint32_t)&kargv[0] + l*sizeof(char*));
+			kbuf_block_sizes[j] = (size_t)l*sizeof(char*);
+
+		}
+
+		//4B boundary aligning
+		uint32_t temp = (size_t)kargv[j];
+		
+		//Checking alignment
+		while(temp % 4 != 0){
+			temp += 1;
+		}
+		kargv[j] = (char *)temp;
+		follower = (size_t)kargv[j];
+
 		if(result){
 			kfree(kargv);
 			kfree(prog);
@@ -250,13 +278,17 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 
 	kargv[j] = NULL;
-	total_buf_size += j*sizeof(char*);
 	
 	for(i = 0; i < j; i++){
 		ustr_size = (size_t)get_size(uargs[i]);
-		result = copyinstr((const_userptr_t)(uargs[i]), (kargv[i]), (ustr_size + 1), &actual);
-		total_buf_size += actual;
-		//TODO: make sure kargv is aligned on 4-byte boundaries
+		ustr_size++;
+		if(i > 0){
+			kbuf_block_sizes[i] = (size_t)kargv[i] - (size_t)kargv[i-1];
+			total_buf_size += kbuf_block_sizes[i];	
+		}
+		result = copyinstr((const_userptr_t)(uargs[i]), (kargv[i]), ustr_size, &actual);
+
+		//TODO: add 1 for each entry in kbuf size array, set very last value after 4
 		if(result){
 			kfree(kargv);
 			kfree(prog);
@@ -281,6 +313,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		*retval = ENOMEM;
 		return;
 	}
+	
 	proc_setas(as);
 	as_activate();
 
@@ -302,16 +335,32 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		*retval = result;
 		return;
 	}
-	
+
+	/*uint32_t stack = (size_t)user_stack;
+	while(stack %4 != 0){
+		stack++;
+	}
+	user_stack = (vaddr_t)stack;
+	*/
 	size_t k = 0;
 	//start of arg buffer on user stack
-	vaddr_t user_buf = user_stack - total_buf_size;
+	vaddr_t user_buf = user_stack;
+	while(user_buf % 4 != 0){
+		user_buf+=1;
+	}
+	
+	user_buf = user_stack - total_buf_size;
 	while(kargv[k] != NULL){
-		kargv[k] = user_buf + kargv[k];
+		if(k == 0){
+		kargv[k] = (char*)((size_t)user_buf + kbuf_block_sizes[k]);
+		} else {
+		kargv[k] = (char*)((size_t)kargv[k-1] + kbuf_block_sizes[k]);
+		}
 		k++;
 	}
-	kargv[k] = NULL;
-	KASSERT(k == j);
+	//kargv[k] = NULL;
+	
+	//KASSERT(k == j);
 
 	result = copyout((const void*)kargv, (userptr_t)user_buf, total_buf_size);
 	if(result){
