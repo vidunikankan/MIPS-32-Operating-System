@@ -116,7 +116,7 @@ common_prog(int nargs, char **args)
 {
 	struct proc *proc;
 	int result;
-	int status;
+	// int status;
 
 #if OPT_SYNCHPROBS
 	kprintf("Warning: this probably won't work with a "
@@ -139,8 +139,8 @@ common_prog(int nargs, char **args)
 		proc_destroy(proc);
 		return result;
 	}
-	
-	result = sys_waitpid(proc->pid, &status, 0);
+
+	result = sys_waitpid(proc->pid, NULL, 0);
 	if(result){
 		return result;
 	}
@@ -684,7 +684,7 @@ menu_execute(char *line, int isargs)
 		if (isargs) {
 			kprintf("OS/161 kernel: %s\n", command);
 		}
-	
+
 
 			result = cmd_dispatch(command);
 
@@ -694,7 +694,7 @@ menu_execute(char *line, int isargs)
 				panic("Failure processing kernel arguments\n");
 			}
 		}
-		
+
 		return;
 	}
 }
