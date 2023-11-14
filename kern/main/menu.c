@@ -687,10 +687,6 @@ menu_execute(char *line, int isargs)
 	
 
 			result = cmd_dispatch(command);
-			int i = 1;
-			while(i){
-				i = 1;
-			}
 
 		if (result) {
 			kprintf("Menu command failed: %s\n", strerror(result));

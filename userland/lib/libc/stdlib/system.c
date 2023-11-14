@@ -35,7 +35,7 @@
 /*
  * system(): ANSI C
  *
- * Run a command.
+* Run a command.
  */
 
 #define MAXCMDSIZE 2048

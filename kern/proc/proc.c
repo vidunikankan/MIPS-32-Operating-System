@@ -139,7 +139,7 @@ proc_create(const char *name)
 	proc->pid = -1;
 
 	lock_acquire(pid_lock);
-	for(i = 0; i < __PID_MAX; i++){
+	for(i = __PID_MIN; i < __PID_MAX; i++){
 
 		if(pid_status[i] == READY){
 			proc->pid = i;
@@ -366,7 +366,15 @@ proc_create_runprogram(const char *name)
 	if (newproc == NULL) {
 		return NULL;
 	}
-
+	
+	lock_acquire(p_table[newproc->pid]->pid_lock);
+      if (pid_parent[newproc->pid] == -1) {
+          pid_parent[newproc->pid] = curproc->pid;
+      } else {
+          panic("Already exists parent for this process");
+      }
+    lock_release(p_table[newproc->pid]->pid_lock);
+  
 	/* VM fields */
 
 	newproc->p_addrspace = NULL;

@@ -118,9 +118,15 @@ int sys_waitpid(pid_t pid, int *status, int options) {
 
 	//Invalid argument
 	if (options != 0) {return EINVAL;}
-
+	
+	bool is_ready;
 	//PID arg not in bounds
-	if (pid_status[pid] == READY
+	lock_acquire(pid_lock);
+		is_ready = (pid_status[pid] == READY);
+	lock_release(pid_lock);
+
+
+	if (is_ready
 		|| pid < __PID_MIN
 		|| pid > __PID_MAX)
 	{
@@ -250,13 +256,13 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		p++;
 	}
 
+	kfree(tempargs);
 		//counting number of args
 	size_t l = 0;
 	while(uargs[l] != NULL){
 		l++;
 	}
 
-	kfree(tempargs);
 
 	
 	//adding array pointer portion of kernel buffer to total size
