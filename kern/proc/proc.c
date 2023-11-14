@@ -276,6 +276,11 @@ proc_destroy(struct proc *proc)
 		(void) as;
 	}
 
+	int threadarray_size = threadarray_num(&proc->p_threads);
+	for (int i = 0; i < threadarray_size; i++){
+		threadarray_remove(&proc->p_threads, 0);
+	}
+
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
@@ -366,7 +371,7 @@ proc_create_runprogram(const char *name)
 	if (newproc == NULL) {
 		return NULL;
 	}
-	
+
 	lock_acquire(p_table[newproc->pid]->pid_lock);
       if (pid_parent[newproc->pid] == -1) {
           pid_parent[newproc->pid] = curproc->pid;
@@ -374,7 +379,7 @@ proc_create_runprogram(const char *name)
           panic("Already exists parent for this process");
       }
     lock_release(p_table[newproc->pid]->pid_lock);
-  
+
 	/* VM fields */
 
 	newproc->p_addrspace = NULL;
@@ -487,7 +492,7 @@ proc_remthread(struct thread *t)
 			threadarray_remove(&proc->p_threads, i);
 			spinlock_release(&proc->p_lock);
 			spl = splhigh();
-			//t->t_proc = NULL;
+			t->t_proc = NULL;
 			splx(spl);
 			return;
 		}
