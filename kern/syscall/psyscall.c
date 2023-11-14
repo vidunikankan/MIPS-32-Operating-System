@@ -383,7 +383,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
-	as_destroy(old);
+	if (old != NULL) {as_destroy(old);}
 
 	//set new address space & activate
 	proc_setas(as);
