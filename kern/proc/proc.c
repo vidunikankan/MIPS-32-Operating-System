@@ -137,6 +137,7 @@ proc_create(const char *name)
 		return NULL;
 	}
 	proc->pid = -1;
+	proc->fork_frame = NULL;
 
 	lock_acquire(pid_lock);
 	for(i = __PID_MIN; i < __PID_MAX; i++){

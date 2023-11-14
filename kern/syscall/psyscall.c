@@ -50,6 +50,8 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 		return EMPROC;
 	}
 
+	child->fork_frame = child_tf;
+
 	lock_acquire(p_table[child->pid]->pid_lock);
 	if (pid_parent[child->pid] == -1) {
 		pid_parent[child->pid] = curproc->pid;
@@ -57,7 +59,7 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 		panic("Already exists parent for this process");
 	}
 	lock_release(p_table[child->pid]->pid_lock);
-
+	
 	//Not sure about this
 	result = as_copy(curproc->p_addrspace, &(child->p_addrspace));
 	if (result){
@@ -174,11 +176,15 @@ void sys__exit(int exitcode) {
 
 	//If parent still alive, update exitcode
 	if (pid_status[parent] == RUNNING) {
+		kfree(p_table[parent]->proc->fork_frame);
+		p_table[parent]->proc->fork_frame = NULL;
 		pid_status[parent] = ZOMBIE;
 		pid_waitcode[parent] = exitcode;
 
 	//If orphaned, just destroy entry since no one is waiting on exitcode
 	} else if (pid_status[parent] == ORPHAN) {
+		kfree(p_table[parent]->proc->fork_frame);
+		p_table[parent]->proc->fork_frame = NULL;
 		proc_destroy(p_table[parent]->proc);
 		pid_destroy(p_table[parent]);
 		p_table[parent] = NULL;
@@ -364,6 +370,8 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
+	struct addrspace *old = proc_getas();
+
 	//create new address space
 	as = as_create();
 	if(as == NULL){
@@ -374,6 +382,11 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		*retval = ENOMEM;
 		return;
 	}
+
+	as_destroy(old);
+
+    proc_setas(NULL);
+    as_deactivate();
 
 	//set new address space & activate
 	proc_setas(as);

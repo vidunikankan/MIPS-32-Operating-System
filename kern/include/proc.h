@@ -79,6 +79,7 @@ struct proc {
 
 
 	pid_t pid;
+	struct trapframe *fork_frame;
 	/* add more material here as needed */
 };
 

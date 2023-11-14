@@ -68,12 +68,18 @@ runprogram(char *progname)
 	/* We should be a new process. */
 	KASSERT(proc_getas() == NULL);
 
+	struct addrspace *old = proc_getas();
 	/* Create a new address space. */
 	as = as_create();
 	if (as == NULL) {
 		vfs_close(v);
 		return ENOMEM;
 	}
+
+	as_destroy(old);
+
+    proc_setas(NULL);
+    as_deactivate();
 
 	/* Switch to it and activate it. */
 	proc_setas(as);
