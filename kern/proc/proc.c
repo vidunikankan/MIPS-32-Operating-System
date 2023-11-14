@@ -265,16 +265,13 @@ proc_destroy(struct proc *proc)
 		 */
 		struct addrspace *as;
 
-		// if (proc == curproc) {
-		// 	as = proc_setas(NULL);
-		// 	as_deactivate();
-		// } else {
-		// 	as = proc->p_addrspace;
-		// 	proc->p_addrspace = NULL;
-		// }
-
-		as = proc->p_addrspace;
-		as_destroy(as);
+		if (proc == curproc) {
+			as = proc_setas(NULL);
+			as_deactivate();
+		} else {
+			as = proc->p_addrspace;
+			proc->p_addrspace = NULL;
+		}
 
 		(void) as;
 	}
