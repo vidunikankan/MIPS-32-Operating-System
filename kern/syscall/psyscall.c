@@ -112,7 +112,7 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 int sys_waitpid(pid_t pid, int *status, int options) {
 	int exitcode;
 	bool is_child = pid_parent[pid] == curproc->pid ? true : false;
-
+	int result;
 	//Check is curproc is parent
 	if (is_child == false) {return ECHILD;}
 
@@ -142,7 +142,7 @@ int sys_waitpid(pid_t pid, int *status, int options) {
 	lock_release(pid_lock);
 
 	if (status != NULL) {
-		int result = copyout(&exitcode, (userptr_t) status, sizeof(int));
+		result = copyout(&exitcode, (userptr_t) status, sizeof(int));
 		if (result){return result;}
 	}
 
