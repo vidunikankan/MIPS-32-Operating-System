@@ -7,6 +7,7 @@
 #include <mips/trapframe.h>
 
 
+#define ADDR_MIPS 32
 
 pid_t sys_getpid(void);
 

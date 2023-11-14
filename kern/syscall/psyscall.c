@@ -237,7 +237,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
-	result = copyin((const_userptr_t)&uargs[0], &kargv[0], sizeof(char*));
+	result = copyin((const_userptr_t)&uargs[0], &kargv[0], ADDR_MIPS);
 	if(result){
 		//kfree(kargv);
 		kfree(kargv);
@@ -247,22 +247,21 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 
 
-	/*size_t p = 0;
-	while(uargs[p] != NULL){
-		result = copyin((const_userptr_t) uargs[p], tempargs[p], ADDR_MIPS);
+	size_t l = 0;
+	while(uargs[l] != NULL){
+		result = copyin((const_userptr_t) &uargs[l], &kargv[l], ADDR_MIPS);
 		if(result){
 			kfree(kargv);
-			kfree(tempargs);
 			kfree(prog);
 			*retval = result;
 			return;
 		}
-		p++;
-	}*/
+		l++;
+	}
 	
-	size_t l = 0;
+	l = 0;
 	while(uargs[l] != NULL){
-		result = copyin((const_userptr_t) &uargs[l], &kargv[l], sizeof(char*));
+		result = copyin((const_userptr_t) uargs[l], kargv[l], ADDR_MIPS);
 		if(result){
 			//kfree(kargv);
 			kfree(kargv);
