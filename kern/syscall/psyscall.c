@@ -191,24 +191,21 @@ void sys__exit(int exitcode) {
 
 void sys_execv(const char *uprogram, char **uargs, int *retval){
 
-	//char **kargv = (char**)kmalloc(ARG_MAX);
-	char **tempargs = (char**)kmalloc(ARG_MAX - PATH_MAX);
+	char **kargv = (char**)kmalloc(ARG_MAX - PATH_MAX);
 	char *prog = (char*)kmalloc(PATH_MAX);
 
-	if(tempargs == NULL || prog == NULL){
+	if(kargv == NULL || prog == NULL){
 		*retval = ENOMEM;
 		return;
 	}
 
 	uint32_t follower;
-	size_t i = 0;
 	int result;
 	size_t ustr_size = 0;
 	size_t path_size = 0;
 	size_t actual = 0;
-	size_t total_buf_size = 0;
+	size_t total_buf_size = 0;;
 	size_t j = 0;
-	size_t ADDR_MIPS = 32;
 	struct vnode *v;
 	vaddr_t entrypoint, user_stack;
 	struct addrspace *as;
@@ -224,7 +221,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	result= copyinstr((const_userptr_t)uprogram, prog, PATH_MAX, &path_size);
 	if(result){
 		//kfree(kargv);
-		kfree(tempargs);
+		kfree(kargv);
 		kfree(prog);
 		*retval = result;
 		return;
@@ -234,16 +231,16 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	path_length = (size_t)get_size(prog);
 	if(path_length == 0){
 		//kfree(kargv);
-		kfree(tempargs);
+		kfree(kargv);
 		kfree(prog);
 		*retval = EINVAL;
 		return;
 	}
 
-	result = copyin((const_userptr_t)&uargs[0], &tempargs[0], sizeof(char*));
+	result = copyin((const_userptr_t)&uargs[0], &kargv[0], sizeof(char*));
 	if(result){
 		//kfree(kargv);
-		kfree(tempargs);
+		kfree(kargv);
 		kfree(prog);
 		*retval = result;
 		return;
@@ -263,23 +260,22 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		p++;
 	}*/
 	
-	size_t h = 0;
-	while(uargs[h] != NULL){
-		result = copyin((const_userptr_t) &uargs[h], &tempargs[h], sizeof(char*));
+	size_t l = 0;
+	while(uargs[l] != NULL){
+		result = copyin((const_userptr_t) &uargs[l], &kargv[l], sizeof(char*));
 		if(result){
 			//kfree(kargv);
-			kfree(tempargs);
+			kfree(kargv);
 			kfree(prog);
 			*retval = result;
 			return;
 		}
-		h++;
+		l++;
 	}
 
 	//kfree(tempargs);
-	char **kargv = tempargs;
 	//counting number of args
-	size_t l = 0;
+	l = 0;
 	while(uargs[l] != NULL){
 		l++;
 	}
@@ -294,7 +290,8 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	total_buf_size += l*sizeof(char*) + 4;
 
 	//init an array that holds kernel buffer block sizes
-	size_t kbuf_block_sizes[l];
+	//size_t kbuf_block_sizes[l];
+	size_t *kbuf_block_sizes = kmalloc(l*sizeof(size_t));
 
 	//packing in strings & setting pointers in kernel buffer accordingly
 	for(j = 0; j < l; j++){
@@ -328,28 +325,29 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 
 	//setting null-term
-	kargv[j] = NULL;
-
+	kargv[l] = NULL;
+	j = 0;
 	//setting rest of block size array and copying in strings from user buffer
-	for(i = 0; i < j; i++){
+	for(j = 0; j < l; j++){
 		//getting size of user string to pass into copinstr
-		ustr_size = (size_t)get_size(uargs[i]);
+		ustr_size = (size_t)get_size(uargs[j]);
 		ustr_size++; //(+1 for 0-term)
 
-		if(i > 0){
-			kbuf_block_sizes[i] = (size_t)kargv[i] - (size_t)kargv[i-1];
-			total_buf_size += kbuf_block_sizes[i]; //need to account for 0-term
+		if(j > 0){
+			kbuf_block_sizes[j] = (size_t)kargv[j] - (size_t)kargv[j-1];
+			total_buf_size += kbuf_block_sizes[j]; //need to account for 0-term
 		}
-		result = copyinstr((const_userptr_t)(uargs[i]), (kargv[i]), ustr_size, &actual);
+		result = copyinstr((const_userptr_t)(uargs[j]), (kargv[j]), ustr_size, &actual);
 		if(result){
 			kfree(kargv);
 			kfree(prog);
+			kfree(kbuf_block_sizes);
 			*retval = result;
 			return;
 		}
 
 		//need to do this, otherwise last argument's bytecount isn't added to total_buf_size
-		if(i == (j - 1)){
+		if(j == (l - 1)){
 			while(actual % 4 != 0){
 				actual++;
 			}
@@ -362,6 +360,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	if(result){
 		kfree(kargv);
 		kfree(prog);
+		kfree(kbuf_block_sizes);
 		*retval = result;
 		return;
 	}
@@ -372,6 +371,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		vfs_close(v);
 		kfree(kargv);
 		kfree(prog);
+		kfree(kbuf_block_sizes);
 		*retval = ENOMEM;
 		return;
 	}
@@ -386,6 +386,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		vfs_close(v);
 		kfree(kargv);
 		kfree(prog);
+		kfree(kbuf_block_sizes);
 		*retval = result;
 		return;
 	}
@@ -398,25 +399,26 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	if(result){
 		kfree(kargv);
 		kfree(prog);
+		kfree(kbuf_block_sizes);
 		*retval = result;
 		return;
 	}
 
-	size_t k = 0;
 	vaddr_t user_buf;
 	kargv[j] = NULL;
+	j = 0;
 
 	//stack grows down, so we minus kernel buf size from top of stack to get user buffer pointer
 	user_buf = user_stack - total_buf_size;
 
 	//setting pointers on user stack before we copy out
-	while(k < j){
-		if(k == 0){
-		kargv[k] = (char*)((size_t)user_buf + kbuf_block_sizes[k]);
+	while(j < l){
+		if(j == 0){
+		kargv[j] = (char*)((size_t)user_buf + kbuf_block_sizes[j]);
 		} else {
-		kargv[k] = (char*)((size_t)kargv[k-1] + kbuf_block_sizes[k]);
+		kargv[j] = (char*)((size_t)kargv[j-1] + kbuf_block_sizes[j]);
 		}
-		k++;
+		j++;
 	}
 
 
@@ -425,6 +427,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	if(result){
 		kfree(kargv);
 		kfree(prog);
+		kfree(kbuf_block_sizes);
 		*retval = result;
 		return;
 	}
@@ -432,7 +435,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	//free heap mem
 	kfree(kargv);
 	kfree(prog);
-
+	kfree(kbuf_block_sizes);
 	//set user stack pointer
 	user_stack = user_buf;
 
