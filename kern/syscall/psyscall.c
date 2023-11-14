@@ -191,9 +191,15 @@ void sys__exit(int exitcode) {
 
 void sys_execv(const char *uprogram, char **uargs, int *retval){
 
-	char **kargv = (char**)kmalloc(ARG_MAX);
-	char **tempargs = (char**)kmalloc(ARG_MAX);
+	//char **kargv = (char**)kmalloc(ARG_MAX);
+	char **tempargs = (char**)kmalloc(ARG_MAX - PATH_MAX);
 	char *prog = (char*)kmalloc(PATH_MAX);
+
+	if(tempargs == NULL || prog == NULL){
+		*retval = ENOMEM;
+		return;
+	}
+
 	uint32_t follower;
 	size_t i = 0;
 	int result;
@@ -206,6 +212,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	struct vnode *v;
 	vaddr_t entrypoint, user_stack;
 	struct addrspace *as;
+	*retval = 0;
 
 
 	if(uprogram == NULL || uargs == NULL){
@@ -216,7 +223,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	//copyin name
 	result= copyinstr((const_userptr_t)uprogram, prog, PATH_MAX, &path_size);
 	if(result){
-		kfree(kargv);
+		//kfree(kargv);
 		kfree(tempargs);
 		kfree(prog);
 		*retval = result;
@@ -226,16 +233,16 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	size_t path_length;
 	path_length = (size_t)get_size(prog);
 	if(path_length == 0){
-		kfree(kargv);
+		//kfree(kargv);
 		kfree(tempargs);
 		kfree(prog);
 		*retval = EINVAL;
 		return;
 	}
 
-	result = copyin((const_userptr_t)&uargs[0], &tempargs[0], ADDR_MIPS);
+	result = copyin((const_userptr_t)&uargs[0], &tempargs[0], sizeof(char*));
 	if(result){
-		kfree(kargv);
+		//kfree(kargv);
 		kfree(tempargs);
 		kfree(prog);
 		*retval = result;
@@ -243,7 +250,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 	}
 
 
-	size_t p = 0;
+	/*size_t p = 0;
 	while(uargs[p] != NULL){
 		result = copyin((const_userptr_t) uargs[p], tempargs[p], ADDR_MIPS);
 		if(result){
@@ -254,16 +261,34 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 			return;
 		}
 		p++;
+	}*/
+	
+	size_t h = 0;
+	while(uargs[h] != NULL){
+		result = copyin((const_userptr_t) &uargs[h], &tempargs[h], sizeof(char*));
+		if(result){
+			//kfree(kargv);
+			kfree(tempargs);
+			kfree(prog);
+			*retval = result;
+			return;
+		}
+		h++;
 	}
 
-	kfree(tempargs);
-		//counting number of args
+	//kfree(tempargs);
+	char **kargv = tempargs;
+	//counting number of args
 	size_t l = 0;
 	while(uargs[l] != NULL){
 		l++;
 	}
 
-
+	/*char **kargv = (char**)kmalloc(ARG_MAX);
+	if(kargv == NULL){
+		*retval = ENOMEM;
+		return;
+	}*/
 
 	//adding array pointer portion of kernel buffer to total size
 	total_buf_size += l*sizeof(char*) + 4;
