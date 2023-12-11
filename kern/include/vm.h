@@ -48,7 +48,7 @@ enum page_state{
 };
 
 struct coremap_entry{
-	enum page_state;
+	enum page_state page_state;
 	struct proc *owner_proc;
 	int block_id;
 	int block_size;
@@ -69,6 +69,11 @@ void vm_bootstrap(void);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
+int check_if_pages_fixed(size_t, unsigned long);
+paddr_t page_nalloc(unsigned long);
+void make_page_avail(paddr_t);
+vaddr_t page_alloc(void);
+void page_free(vaddr_t);
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);

@@ -8,6 +8,7 @@
 #include <current.h>
 #include <mips/tlb.h>
 #include <addrspace.h>
+#include <synch.h>
 #include <vm.h>
 
 /*
@@ -43,12 +44,12 @@ static struct coremap_entry *coremap;
 static int vm_bootstrap_flag = 0;
 static paddr_t last_addr;
 static paddr_t first_addr;
-static paddr_t free_addr;
+static paddr_t first_free;
 static size_t pages_in_ram;
 static int current_block_id;
 
 void
-vm_bootstrap(void)
+vm_bootstrap(void){
 	
 	//Get last physical address to find out how much ram we have
 	last_addr = ram_getsize();
@@ -67,15 +68,15 @@ vm_bootstrap(void)
 	
 	//Getting pages for coremap
 	spinlock_acquire(&stealmem_lock);
-	coremap = ram_stealmem(pages_needed);
+	coremap = (struct coremap_entry*)ram_stealmem(pages_needed);
 	spinlock_release(&stealmem_lock);
 	
 	//The first address of the phys mem  we are responsible for points to coremap
-	first_addr = coremap;
+	first_addr = (paddr_t)coremap;
 	KASSERT(first_addr%PAGE_SIZE == 0);
 
 	//Init'ing coremap, all pages are free at this point
-	for(int i = 0; i < num_pages; i++){
+	for(int i = 0; i < (int)num_pages; i++){
 		coremap[i].page_state = free;	
 		coremap[i].owner_proc = NULL;
 		coremap[i].block_id = -1;
@@ -83,11 +84,11 @@ vm_bootstrap(void)
 	}
 	
 	//Checking that the coremap isn't taking up entire physmem
-	int cmap_start_page = coremap/PAGE_SIZE;
-	KASSERT((pages_needed + cmap_start_page) < num_pages)
+	int cmap_start_page =(int) ((paddr_t)coremap/PAGE_SIZE);
+	KASSERT((pages_needed + cmap_start_page) < num_pages);
 	
 	//Setting the pages containing coremap to fixed
-	for(int j = cmap_start_page; j < (pages_needed + cmap_start_page); j++){
+	for(int j = cmap_start_page; j < (int)(pages_needed + cmap_start_page); j++){
 		coremap[j].page_state = fixed;
 		coremap[j].owner_proc = curproc;
 		coremap[j].block_id = current_block_id;
@@ -95,8 +96,8 @@ vm_bootstrap(void)
 	}
 
 	//Setting free address & checking that it points to valid page
-	free_addr = first_addr + (pages_needed*PAGE_SIZE);
-	KASSERT(free_addr%PAGE_SIZE == 0);
+	first_free  = first_addr + (pages_needed*PAGE_SIZE);
+	KASSERT((first_free %PAGE_SIZE) == 0);
 
 	//Setting bootstrap flag
 	vm_bootstrap_flag = 1;
@@ -117,8 +118,6 @@ vm_bootstrap(void)
 	}
 	return;
 
-	
-
 }
 
 
@@ -137,12 +136,12 @@ getppages(unsigned long npages)
 	return addr;
 }
 
-//Called by alloc_kpages() when we need n continuous pages for kernel use
-static 
+//Called by alloc_kpages() when we need n continuous pages for kernel use 
+//TODO: should be static, change back to static & update header once addrspace.c no longer needs this function
 paddr_t
 page_nalloc(unsigned long npages){
 	
-	paddr_t addr = -1;
+	paddr_t addr = 0;
 	int continuous_pages = 0;
 	size_t block_id;
 	size_t page_num_free;
@@ -173,11 +172,11 @@ page_nalloc(unsigned long npages){
 	
 	lock_release(addr_pointers_lock);
 	
-	size_t coremap_idx = page_num_free;
-	size_t temp_idx = check_if_pages_fixed(coremap_idx, npages);
+	int coremap_idx = (int)page_num_free;
+	int temp_idx = check_if_pages_fixed(coremap_idx, npages);
 	
 	//If there is a fixed page within npages of free page_num_free, need to use new idx;
-	if(temp_idx >  coremap_idx + npages){
+	if(temp_idx >  (coremap_idx + (int)npages)){
 		coremap_idx = temp_idx - npages;
 
 	/*If temp_idx returned negative (search ran off end of physmem), 
@@ -193,7 +192,7 @@ page_nalloc(unsigned long npages){
 	lock_acquire(coremap_lock);
 	
 	
-	while(continuous_pages != npages){
+	while(continuous_pages != (int)npages){
 		//If pages are not fixed but not free, we must make them free by evicting
 		if(coremap[coremap_idx].owner_proc != NULL){
 			lock_release(coremap_lock);
@@ -221,8 +220,8 @@ page_nalloc(unsigned long npages){
 	}
 	
 	lock_release(coremap_lock);
-	KASSERT(continuous_pages == npages);
-	KASSERT(addr != -1);
+	KASSERT(continuous_pages == (int)npages);
+	KASSERT(addr != 0);
 
 	return addr;
 
@@ -234,12 +233,13 @@ page_nalloc(unsigned long npages){
 	- Original cmap_idx + npages (if next npages were non-fixed)
 	- New idx where preceding  npages are non-fixed (there was a fixed page in [cmap_idx, cmap_idx + npages]
 */
-static int check_if_pages_fixed(size_t cmap_idx, unsigned long npages){
+int check_if_pages_fixed(size_t cmap_idx, unsigned long npages){
 	int page = 0;
+	int npgs = (int)npages;
 	int idx = (int)cmap_idx;
 	
-	while(page != npages){
-		if((idx*PAGE_SIZE) > last_addr){
+	while(page != npgs){
+		if((idx*PAGE_SIZE) > (int)last_addr){
 			idx = -1;
 			break;
 		}
@@ -258,7 +258,7 @@ static int check_if_pages_fixed(size_t cmap_idx, unsigned long npages){
 }
 
 //Evicts page to give to kernel as continuous block, precondition of paddr_t page being NON-FIXED
-static void 
+void 
 make_page_avail(paddr_t page){
 	/*Eviction routine*/
 	(void)page;
@@ -313,7 +313,6 @@ vaddr_t
 alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
-	size_t page_num;
 	
 	if(vm_bootstrap_flag){
 		pa = page_nalloc(npages);
@@ -331,7 +330,7 @@ alloc_kpages(unsigned npages)
 //Precondition: vaddr_t addr must be returned by page_alloc, NOT alloc_kpages!
 void 
 page_free(vaddr_t addr){
-	paddr_t addr_to_free = (paddr_t)(addr - MIPS_USEG);
+	paddr_t addr_to_free = (paddr_t)(addr - MIPS_KUSEG);
 	KASSERT(addr_to_free % PAGE_SIZE == 0);
 	size_t coremap_idx = addr_to_free/PAGE_SIZE;
 	
@@ -347,7 +346,7 @@ page_free(vaddr_t addr){
 		first_free = (paddr_t)(coremap_idx*PAGE_SIZE);
 	lock_release(addr_pointers_lock);
 	return;
-
+}
 
 void
 free_kpages(vaddr_t addr)
@@ -489,186 +488,4 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	return EFAULT;
 }
 
-struct addrspace *
-as_create(void)
-{
-	struct addrspace *as = kmalloc(sizeof(struct addrspace));
-	if (as==NULL) {
-		return NULL;
-	}
 
-	as->as_vbase1 = 0;
-	as->as_pbase1 = 0;
-	as->as_npages1 = 0;
-	as->as_vbase2 = 0;
-	as->as_pbase2 = 0;
-	as->as_npages2 = 0;
-	as->as_stackpbase = 0;
-
-	return as;
-}
-
-void
-as_destroy(struct addrspace *as)
-{
-	kfree(as);
-}
-
-void
-as_activate(void)
-{
-	int i, spl;
-	struct addrspace *as;
-
-	as = proc_getas();
-	if (as == NULL) {
-		return;
-	}
-
-	/* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
-
-	for (i=0; i<NUM_TLB; i++) {
-		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-	}
-
-	splx(spl);
-}
-
-void
-as_deactivate(void)
-{
-	/* nothing */
-}
-
-int
-as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
-		 int readable, int writeable, int executable)
-{
-	size_t npages;
-
-	/* Align the region. First, the base... */
-	sz += vaddr & ~(vaddr_t)PAGE_FRAME;
-	vaddr &= PAGE_FRAME;
-
-	/* ...and now the length. */
-	sz = (sz + PAGE_SIZE - 1) & PAGE_FRAME;
-
-	npages = sz / PAGE_SIZE;
-
-	/* We don't use these - all pages are read-write */
-	(void)readable;
-	(void)writeable;
-	(void)executable;
-
-	if (as->as_vbase1 == 0) {
-		as->as_vbase1 = vaddr;
-		as->as_npages1 = npages;
-		return 0;
-	}
-
-	if (as->as_vbase2 == 0) {
-		as->as_vbase2 = vaddr;
-		as->as_npages2 = npages;
-		return 0;
-	}
-
-	/*
-	 * Support for more than two regions is not available.
-	 */
-	kprintf("dumbvm: Warning: too many regions\n");
-	return ENOSYS;
-}
-
-static
-void
-as_zero_region(paddr_t paddr, unsigned npages)
-{
-	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
-}
-
-int
-as_prepare_load(struct addrspace *as)
-{
-	KASSERT(as->as_pbase1 == 0);
-	KASSERT(as->as_pbase2 == 0);
-	KASSERT(as->as_stackpbase == 0);
-
-	as->as_pbase1 = getppages(as->as_npages1);
-	if (as->as_pbase1 == 0) {
-		return ENOMEM;
-	}
-
-	as->as_pbase2 = getppages(as->as_npages2);
-	if (as->as_pbase2 == 0) {
-		return ENOMEM;
-	}
-
-	as->as_stackpbase = getppages(DUMBVM_STACKPAGES);
-	if (as->as_stackpbase == 0) {
-		return ENOMEM;
-	}
-
-	as_zero_region(as->as_pbase1, as->as_npages1);
-	as_zero_region(as->as_pbase2, as->as_npages2);
-	as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
-
-	return 0;
-}
-
-int
-as_complete_load(struct addrspace *as)
-{
-	(void)as;
-	return 0;
-}
-
-int
-as_define_stack(struct addrspace *as, vaddr_t *stackptr)
-{
-	KASSERT(as->as_stackpbase != 0);
-
-	*stackptr = USERSTACK;
-	return 0;
-}
-
-int
-as_copy(struct addrspace *old, struct addrspace **ret)
-{
-	struct addrspace *new;
-
-	new = as_create();
-	if (new==NULL) {
-		return ENOMEM;
-	}
-
-	new->as_vbase1 = old->as_vbase1;
-	new->as_npages1 = old->as_npages1;
-	new->as_vbase2 = old->as_vbase2;
-	new->as_npages2 = old->as_npages2;
-
-	/* (Mis)use as_prepare_load to allocate some physical memory. */
-	if (as_prepare_load(new)) {
-		as_destroy(new);
-		return ENOMEM;
-	}
-
-	KASSERT(new->as_pbase1 != 0);
-	KASSERT(new->as_pbase2 != 0);
-	KASSERT(new->as_stackpbase != 0);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
-		(const void *)PADDR_TO_KVADDR(old->as_pbase1),
-		old->as_npages1*PAGE_SIZE);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_pbase2),
-		(const void *)PADDR_TO_KVADDR(old->as_pbase2),
-		old->as_npages2*PAGE_SIZE);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
-		(const void *)PADDR_TO_KVADDR(old->as_stackpbase),
-		DUMBVM_STACKPAGES*PAGE_SIZE);
-
-	*ret = new;
-	return 0;
-}
