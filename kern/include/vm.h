@@ -35,6 +35,25 @@
  *
  * You'll probably want to add stuff here.
  */
+#define PAGE_FREE 0
+#define PAGE_DIRTY 1
+#define PAGE_CLEAN 2
+#define PAGE_FIXED 3
+
+enum page_state{
+	free,
+	dirty,
+	clean,
+	fixed
+};
+
+struct coremap_entry{
+	enum page_state;
+	struct proc *owner_proc;
+	int block_id;
+	int block_size;
+	//ADD swap info later
+};
 
 
 #include <machine/vm.h>
