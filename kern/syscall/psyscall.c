@@ -59,7 +59,7 @@ int sys_fork(struct trapframe* parent_tf, pid_t *retval){
 		panic("Already exists parent for this process");
 	}
 	lock_release(p_table[child->pid]->pid_lock);
-	
+
 	//Not sure about this
 	result = as_copy(curproc->p_addrspace, &(child->p_addrspace));
 	if (result){
@@ -264,7 +264,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		}
 		l++;
 	}
-	
+
 	l = 0;
 	while(uargs[l] != NULL){
 		result = copyin((const_userptr_t) uargs[l], kargv[l], ADDR_MIPS);
@@ -383,10 +383,7 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 		return;
 	}
 
-	as_destroy(old);
-
-    proc_setas(NULL);
-    as_deactivate();
+	if (old != NULL) {as_destroy(old);}
 
 	//set new address space & activate
 	proc_setas(as);
