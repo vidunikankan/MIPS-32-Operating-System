@@ -112,7 +112,6 @@ vm_bootstrap(void){
 	vm_bootstrap_flag = 1;
 	
 	//Creating coremap lock to be used by non-bootstrap funcs & procs
-	//TODO: check that this doesn't cause problems by lock_create()'s use of kmalloc()
 	coremap_lock = lock_create("coremap_lock");
 	if(coremap_lock == NULL){
 		panic("lock creation failed");
@@ -167,7 +166,8 @@ page_nalloc(unsigned long npages){
 		//Reading next free page addr
 		page_num_free= first_free/PAGE_SIZE;
 		first_free+= (npages*PAGE_SIZE);
-
+		if(first_free > last_addr) first_free = 0;
+		
 		//Making sure free pointer points to next free page
 		lock_acquire(coremap_lock);
 			while(coremap[(first_free/PAGE_SIZE)].page_state != free){
@@ -273,7 +273,7 @@ make_page_avail(paddr_t page){
 	(void)page;
 }
 
-vaddr_t
+void
 page_alloc(struct addrspace *as, vaddr_t *va){
 	//TODO: add as, va info in as parameters. Add swap info (where page is) into coremap_entry struct
 	paddr_t free_ptr;
@@ -288,6 +288,18 @@ page_alloc(struct addrspace *as, vaddr_t *va){
 		//TODO: check that the incremented free ptr actually points to a free & NON-FIXED page!
 		//TODO: add check to make sure free pointer wraps around if it goes over last addr
 		first_free += PAGE_SIZE;
+		if(first_free > last_addr) first_free = 0;
+
+		lock_acquire(coremap_lock);
+			while(coremap[(first_free/PAGE_SIZE)].page_state != free){
+				first_free+= PAGE_SIZE;
+				if(first_free == last_addr){
+					first_free = 0;
+					break;
+				}
+			}
+		lock_release(coremap_lock);
+	
 	lock_release(addr_pointers_lock);
 
 
@@ -321,9 +333,14 @@ page_alloc(struct addrspace *as, vaddr_t *va){
 	//Create second-level PT if it DNE
 	if(!pt_exists){
 		//Storing physical addr of second PT in page directory
-		as->page_dir[pgdir_index] = ((uint32_t)(kmalloc(PAGE_SIZE)- MIPS_KSEG0) << 12);
+		uint32_t *temp = kmalloc(PAGE_SIZE);
+		if(temp == NULL){
+			//TODO: Undo coremap stuff from above
+			panic("Ruh roh ENOMEM");
+		}
+		as->page_dir[pgdir_index] = (((uint32_t)temp - MIPS_KSEG0) << 12);
 		//Setting ptexists bit for page directory entry
-		as->page_dir[pgdir_index] = as->page_dir[pgdir_index] | PTEXISTS_MASK;	
+		as->page_dir[pgdir_index] = as->page_dir[pgdir_index] | PTEXISTS_MASK | PG_PRESENT_MASK;	
 	}
 	
 	//Indexing into second page table
@@ -332,29 +349,27 @@ page_alloc(struct addrspace *as, vaddr_t *va){
 
 	//Storing PPN in second page table
 	//TODO: Store swap info in last 12 bits by OR'ing with mask
-	pt_addr[pt_index] = (paddr << 12) | PG_PRESENT_MASK;
-	*va = vaddr; //NOTE: maybe adapt so caller can pass in NULL ptr if they don't have a va?
-	return vaddr;
+	pt_addr[pt_index] = (paddr << 12) | PTEXISTS_MASK | PG_PRESENT_MASK;
+	return;
 }
 
 /*Given an address space and virtual address, returns a kvaddr pointer (kernel heap) to page table entry.
 Creates new pt entry if flag set, returns 0 if flag not set and entry DNE.*/
-vaddr_t
+vaddr_t*
 pgdir_walk(struct addrspace *as, vaddr_t *vaddr, uint8_t create_table_flag){
 	vaddr_t va = *vaddr;
 	vaddr_t pgdir_index = (va & TOP_BIT_MASK) >> 22;
-	vaddr_t pt_entry;
+	vaddr_t *pt_entry;
 	uint8_t pt_exists = as->page_dir[pgdir_index] & PTEXISTS_MASK;
 
 	if(pt_exists){
-		pt_entry = PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
+		pt_entry = (vaddr_t*)PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
 		return pt_entry;
 	} else {
+		//TODO: check if page on disk before creating table
 		if(create_table_flag){
-			//TODO: Change so that instead of allocating a page, it just creates a new table, write new func for this
-			//NOTE: make sure new func sets pt_exists bit, as_copy will be dependent on this
-			va = page_alloc(as, vaddr);
-			pt_entry = PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
+			page_alloc(as, vaddr);
+			pt_entry = (vaddr_t*)PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
 			return pt_entry;
 		}
 		return 0;
@@ -447,7 +462,8 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
+	vaddr_t *pt_entry;
+	vaddr_t pt_index;
 	paddr_t paddr;
 	int i;
 	uint32_t ehi, elo;
@@ -486,41 +502,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		 */
 		return EFAULT;
 	}
-
-	/* Assert that the address space has been set up properly. */
-	KASSERT(as->as_vbase1 != 0);
-	KASSERT(as->as_pbase1 != 0);
-	KASSERT(as->as_npages1 != 0);
-	KASSERT(as->as_vbase2 != 0);
-	KASSERT(as->as_pbase2 != 0);
-	KASSERT(as->as_npages2 != 0);
-	KASSERT(as->as_stackpbase != 0);
-	KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
-	KASSERT((as->as_pbase1 & PAGE_FRAME) == as->as_pbase1);
-	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
-	KASSERT((as->as_pbase2 & PAGE_FRAME) == as->as_pbase2);
-	KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
-
-	vbase1 = as->as_vbase1;
-	vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
-	vbase2 = as->as_vbase2;
-	vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
-	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
-	stacktop = USERSTACK;
-
-	if (faultaddress >= vbase1 && faultaddress < vtop1) {
-		paddr = (faultaddress - vbase1) + as->as_pbase1;
-	}
-	else if (faultaddress >= vbase2 && faultaddress < vtop2) {
-		paddr = (faultaddress - vbase2) + as->as_pbase2;
-	}
-	else if (faultaddress >= stackbase && faultaddress < stacktop) {
-		paddr = (faultaddress - stackbase) + as->as_stackpbase;
-	}
-	else {
+	pt_index = ((faultaddress & MID_BIT_MASK) >> 12);
+	pt_entry = pgdir_walk(as, &faultaddress, 0);
+	if(pt_entry == 0){
 		return EFAULT;
 	}
-
+	paddr = pt_entry[pt_index] >> 12;
+	
 	/* make sure it's page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
