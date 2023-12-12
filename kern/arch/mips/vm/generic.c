@@ -97,7 +97,7 @@ vm_bootstrap(void){
 	}
 
 	//Setting free address & checking that it points to valid page
-	first_free  = first_addr + (pages_needed*PAGE_SIZE);
+	first_free  = (paddr_t)(first_addr - MIPS_KSEG0) + (pages_needed*PAGE_SIZE);
 	KASSERT((first_free %PAGE_SIZE) == 0);
 
 	//Setting bootstrap flag
