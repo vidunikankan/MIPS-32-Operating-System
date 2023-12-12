@@ -39,6 +39,7 @@
 #define OFFSET_MASK 0xFFF
 #define DESEL_OFFSET 0xFFFFF000
 #define PTEXISTS_MASK 0x1
+#define PG_PRESENT_MASK 0x2
 /*
  * Wrap ram_stealmem in a spinlock.
  */
@@ -331,7 +332,7 @@ page_alloc(struct addrspace *as, vaddr_t *va){
 
 	//Storing PPN in second page table
 	//TODO: Store swap info in last 12 bits by OR'ing with mask
-	pt_addr[pt_index] = (paddr << 12);
+	pt_addr[pt_index] = (paddr << 12) | PG_PRESENT_MASK;
 	*va = vaddr; //NOTE: maybe adapt so caller can pass in NULL ptr if they don't have a va?
 	return vaddr;
 }
@@ -350,6 +351,8 @@ pgdir_walk(struct addrspace *as, vaddr_t *vaddr, uint8_t create_table_flag){
 		return pt_entry;
 	} else {
 		if(create_table_flag){
+			//TODO: Change so that instead of allocating a page, it just creates a new table, write new func for this
+			//NOTE: make sure new func sets pt_exists bit, as_copy will be dependent on this
 			va = page_alloc(as, vaddr);
 			pt_entry = PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
 			return pt_entry;

@@ -99,9 +99,37 @@ as_copy(struct addrspace *old, struct addrspace **ret)
      KASSERT(new->as_pbase2 != 0);
      KASSERT(new->as_stackpbase != 0);
 	 KASSERT(new->page_dir != NULL);
-
+	
+	//copy entire page directory over
 	memmove((void*)new->page_dir, 
 		(const void*)old->page_dir, PAGE_SIZE);
+	
+	for(int i = 0; i < PAGE_SIZE/4; i++){
+		vaddr_t *va;
+		vaddr_t pt_entry_old;
+		vaddr_t pt_entry_new;
+		*va = (i << 22);
+		pt_entry_old = pgdir_walk(old, va, 0);
+		if(pt_entry_old){
+			new->page_dir[i] = new->page_dir[i] | 0xFFFFE; //zeroing "pt_exists" bit so that a new one is created
+			pt_entry_new = pgdir_walk(new, va, 1);
+
+			for(int j = 0; j < PAGE_SIZE/4; j++){
+				vaddr_t *new_va = (i << 22)| (j << 12) | (new->page_dir[i] & 0xFFF);
+				//Check present bit
+				uint8_t page_present = pt_entry_old[j] & 0x2; 
+				//If present, set new pte's present bit
+				if(page_present){
+					pt_entry_new[j] = pt_entry_old[j];
+				}
+				//If not present, ignore for now (TODO: with swapping make disk copy)
+			}
+		}else{
+			//zero the page dir entry, so that next time we check pt_exists is false
+			new->page_dir[i] = new->page_dir[i] & 0x0;
+		}
+	}
+
 
      memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
          (const void *)PADDR_TO_KVADDR(old->as_pbase1),
@@ -127,9 +155,33 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
+	for(int i = 0; i < PAGE_SIZE/4; i++){
+		vaddr_t *va;
+		vaddr_t pt_entry;
+		*va = (i << 22);
+
+		pt_entry = pgdir_walk(as, va, 0);
+		if(pt_entry){
+
+			for(int j = 0; j < PAGE_SIZE/4; j++){
+				//NOTE: last 12 bits should be consistent across directory & pt
+				vaddr_t new_va = (i << 22)| (j << 12) | (as->page_dir[i] & 0xFFF);
+				//Check present bit
+				uint8_t page_present = pt_entry[j] & 0x2; 
+				//If present, set new pte's present bit
+				if(page_present){
+					page_free(new_va);
+				}
+				//If not present, ignore for now (TODO: with swapping, free disk page)
+			}
+		}else{
+			//zero the page dir entry, so that next time we check pt_exists is false
+			new->page_dir[i] = new->page_dir[i] & 0x0;
+		}
 	if(as->page_dir != NULL){
 		kfree(as->page_dir);
 	}
+
 	kfree(as);
 }
 
@@ -228,7 +280,7 @@ as_prepare_load(struct addrspace *as)
 	KASSERT(as->as_pbase1 == 0);
      KASSERT(as->as_pbase2 == 0);
      KASSERT(as->as_stackpbase == 0);
- 
+	//TODO: Change this func so that page_nalloc() is not called 
      as->as_pbase1 = page_nalloc(as->as_npages1);
      if (as->as_pbase1 == 0) {
          return ENOMEM;
