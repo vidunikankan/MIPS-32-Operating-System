@@ -32,6 +32,13 @@
 #define DUMBVM_STACKPAGES    18
 #define PAGE_SIZE 4096
 #define MAX_BLOCKS 4096
+
+//Bit masks
+#define TOP_BIT_MASK 0xFFC00000
+#define MID_BIT_MASK 0x3FF000
+#define OFFSET_MASK 0xFFF
+#define DESEL_OFFSET 0xFFFFF000
+#define PTEXISTS_MASK 0x1
 /*
  * Wrap ram_stealmem in a spinlock.
  */
@@ -266,14 +273,14 @@ make_page_avail(paddr_t page){
 }
 
 vaddr_t
-page_alloc(){
+page_alloc(struct addrspace *as, vaddr_t *va){
 	//TODO: add as, va info in as parameters. Add swap info (where page is) into coremap_entry struct
 	paddr_t free_ptr;
 	paddr_t last_ptr;
 	int block_id;
 	size_t coremap_idx;
 	paddr_t paddr;
-	vaddr_t vaddr;
+	vaddr_t vaddr = *va;
 	lock_acquire(addr_pointers_lock);
 		free_ptr = first_free;
 		last_ptr = last_addr;
@@ -304,9 +311,53 @@ page_alloc(){
 	lock_release(coremap_lock);
 	
 	paddr = (coremap_idx*PAGE_SIZE);
-	vaddr = (vaddr_t)(paddr + MIPS_KUSEG);
-	//TODO: add vaddr to PT?
+	//vaddr = (vaddr_t)(paddr + MIPS_KUSEG); //TODO: check if this is a correct initial pa->va translation
+	vaddr_t pgdir_index = (vaddr & TOP_BIT_MASK) >> 22;
+	
+	//TODO: set other bits when they are implemented
+	uint8_t pt_exists = as->page_dir[pgdir_index] & PTEXISTS_MASK;
+	
+	//Create second-level PT if it DNE
+	if(!pt_exists){
+		//Storing physical addr of second PT in page directory
+		as->page_dir[pgdir_index] = ((uint32_t)(kmalloc(PAGE_SIZE)- MIPS_KSEG0) << 12);
+		//Setting ptexists bit for page directory entry
+		as->page_dir[pgdir_index] = as->page_dir[pgdir_index] | PTEXISTS_MASK;	
+	}
+	
+	//Indexing into second page table
+	vaddr_t pt_index = (vaddr & MID_BIT_MASK) >> 12;
+	vaddr_t *pt_addr = (vaddr_t*)PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
+
+	//Storing PPN in second page table
+	//TODO: Store swap info in last 12 bits by OR'ing with mask
+	pt_addr[pt_index] = (paddr << 12);
+	*va = vaddr; //NOTE: maybe adapt so caller can pass in NULL ptr if they don't have a va?
 	return vaddr;
+}
+
+/*Given an address space and virtual address, returns a kvaddr pointer (kernel heap) to page table entry.
+Creates new pt entry if flag set, returns 0 if flag not set and entry DNE.*/
+vaddr_t
+pgdir_walk(struct addrspace *as, vaddr_t *vaddr, uint8_t create_table_flag){
+	vaddr_t va = *vaddr;
+	vaddr_t pgdir_index = (va & TOP_BIT_MASK) >> 22;
+	vaddr_t pt_entry;
+	uint8_t pt_exists = as->page_dir[pgdir_index] & PTEXISTS_MASK;
+
+	if(pt_exists){
+		pt_entry = PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
+		return pt_entry;
+	} else {
+		if(create_table_flag){
+			va = page_alloc(as, vaddr);
+			pt_entry = PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
+			return pt_entry;
+		}
+		return 0;
+	}
+		
+
 }
 
 /* Allocate/free some kernel-space virtual pages */

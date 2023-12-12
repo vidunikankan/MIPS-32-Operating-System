@@ -55,7 +55,10 @@ struct coremap_entry{
 	//ADD swap info later
 };
 
+struct addrspace;
 
+
+#include <addrspace.h>
 #include <machine/vm.h>
 
 /* Fault-type arguments to vm_fault() */
@@ -72,7 +75,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 int check_if_pages_fixed(size_t, unsigned long);
 paddr_t page_nalloc(unsigned long);
 void make_page_avail(paddr_t);
-vaddr_t page_alloc(void);
+vaddr_t page_alloc(struct addrspace*, vaddr_t*);
+vaddr_t pgdir_walk(struct addrspace*, vaddr_t*, uint8_t);
 void page_free(vaddr_t);
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */

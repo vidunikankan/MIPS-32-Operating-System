@@ -53,7 +53,17 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
-
+	//Allocating a page for the first-level PT (page directory)
+	as->page_dir = kmalloc(PAGE_SIZE);
+	if(as->page_dir == NULL){
+		as_destroy(as);
+		return NULL;
+	}
+	
+	//Initializing all page directory entries to "mapping DNE" state
+	for(int i = 0; i < PAGE_SIZE/4; i++){
+		as->page_dir[i] = 0;
+	}
 	as->as_vbase1 = 0;
      as->as_pbase1 = 0;
      as->as_npages1 = 0;
@@ -88,6 +98,10 @@ as_copy(struct addrspace *old, struct addrspace **ret)
      KASSERT(new->as_pbase1 != 0);
      KASSERT(new->as_pbase2 != 0);
      KASSERT(new->as_stackpbase != 0);
+	 KASSERT(new->page_dir != NULL);
+
+	memmove((void*)new->page_dir, 
+		(const void*)old->page_dir, PAGE_SIZE);
 
      memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
          (const void *)PADDR_TO_KVADDR(old->as_pbase1),
@@ -113,7 +127,9 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
-
+	if(as->page_dir != NULL){
+		kfree(as->page_dir);
+	}
 	kfree(as);
 }
 
@@ -227,8 +243,11 @@ as_prepare_load(struct addrspace *as)
      if (as->as_stackpbase == 0) {
          return ENOMEM;
      }
- 
-     as_zero_region(as->as_pbase1, as->as_npages1);
+ 	
+	if(as->page_dir != NULL){
+     	as_zero_region((paddr_t)(as->page_dir - MIPS_KSEG0), 1);
+	 }
+	 as_zero_region(as->as_pbase1, as->as_npages1);
      as_zero_region(as->as_pbase2, as->as_npages2);
      as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
  

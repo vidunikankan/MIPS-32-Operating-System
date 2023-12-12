@@ -48,6 +48,7 @@ struct vnode;
  * You write this.
  */
 
+
 struct addrspace {
 #if OPT_DUMBVM
         vaddr_t as_vbase1;
@@ -59,7 +60,8 @@ struct addrspace {
         paddr_t as_stackpbase;
 #else
         /* Put stuff here for your VM system */
-        vaddr_t as_vbase1;
+        uint32_t *page_dir;
+		vaddr_t as_vbase1;
         paddr_t as_pbase1;
         size_t as_npages1;
         vaddr_t as_vbase2;
