@@ -66,6 +66,8 @@ struct addrspace {
         vaddr_t as_vbase2;
         size_t as_npages2;
         paddr_t as_stackpbase;
+		vaddr_t heap_start;
+		vaddr_t heap_end;
 #endif
 };
 

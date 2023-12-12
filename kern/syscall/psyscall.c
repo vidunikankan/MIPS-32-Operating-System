@@ -17,7 +17,7 @@
 #include <kern/psyscall.h>
 #include <addrspace.h>
 
-
+#define MAX_VADDR 0x7FFFFFFF
 
 
 pid_t sys_getpid(){
@@ -453,6 +453,48 @@ void sys_execv(const char *uprogram, char **uargs, int *retval){
 
 	panic("enter_new_proc returned\n");
 	return;
+
+}
+
+void *sys_sbrk(intptr_t amount,  int* retval){
+	struct addrspace *as;
+	
+	if(amount%PAGE_SIZE){
+		*retval = EINVAL;
+		return NULL;
+	}
+	
+	as = proc_getas();
+	
+	KASSERT(as->heap_start != 0);
+	KASSERT(as->heap_end != 0);
+	
+	if(amount < 0 && (as->heap_end + amount < as->heap_start)){
+		*retval = EINVAL;
+		return NULL;
+	}
+	
+	vaddr_t user_stack;
+	int result = as_define_stack(as, &user_stack);
+	if(result){
+		*retval = result;
+		return NULL;
+	}
+	if(((as->heap_end + amount) > user_stack) || ((as->heap_end + amount) > MAX_VADDR)){
+		*retval = ENOMEM;
+		return NULL;
+	}
+
+
+	vaddr_t old_break = as->heap_end;
+	as->heap_end += amount;
+	for(int i = 0; i < amount/PAGE_SIZE; i++){
+		vaddr_t va = old_break + i*PAGE_SIZE;
+		page_alloc(as, &va);
+	}
+	*retval = 0;
+	return (void*)old_break;
+
 
 }
 

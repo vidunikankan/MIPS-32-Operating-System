@@ -19,4 +19,6 @@ void sys__exit(int exitcode);
 
 void sys_execv(const char *, char **, int *);
 
+void * sys_sbrk(intptr_t amount, int *retval);
+
 int get_size(char*);

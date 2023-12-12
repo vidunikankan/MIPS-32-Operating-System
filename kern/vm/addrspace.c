@@ -64,6 +64,13 @@ as_create(void)
 	for(int i = 0; i < PAGE_SIZE/4; i++){
 		as->page_dir[i] = 0;
 	}
+        as->as_vbase1 = 0;
+        as->as_npages1 = 0;
+        as->as_vbase2 = 0;
+        as->as_npages2 = 0;
+        as->as_stackpbase = 0;
+		as->heap_start = 0;
+		as->heap_end = 0;
 	return as;
 }
 
@@ -76,7 +83,10 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	if (new==NULL) {
 		return ENOMEM;
 	}
-	
+	size_t heap_size = (size_t)(old->heap_end - old->heap_start);
+
+	memmove((void*)new->heap_start,
+	(const void*)old->heap_start, heap_size);
 	
 	//copy entire page directory over
 	memmove((void*)new->page_dir, 
@@ -119,6 +129,7 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
+
 	for(int i = 0; i < PAGE_SIZE/4; i++){
 		vaddr_t va;
 		vaddr_t *pt_entry;
@@ -228,7 +239,12 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
      if (as->as_vbase2 == 0) {
          as->as_vbase2 = vaddr;
          as->as_npages2 = npages;
-         return 0;
+         as->heap_start = vaddr + sz;
+		 while(as->heap_start % PAGE_SIZE){
+		 	as->heap_start += PAGE_SIZE;
+		}
+		 as->heap_end = as->heap_start;
+		 return 0;
      }
  
 	     /*
