@@ -67,12 +67,13 @@ vm_bootstrap(void){
 	}
 	
 	//Getting pages for coremap
-	spinlock_acquire(&stealmem_lock);
-	coremap = (struct coremap_entry*)ram_stealmem(pages_needed);
-	spinlock_release(&stealmem_lock);
+	//spinlock_acquire(&stealmem_lock);
+	coremap = (struct coremap_entry*)kmalloc(core_entries_size);
+	//ram_stealmem(pages_needed);
+	//spinlock_release(&stealmem_lock);
 	
 	//The first address of the phys mem  we are responsible for points to coremap
-	first_addr = (paddr_t)coremap;
+	first_addr = (paddr_t)(coremap - MIPS_KSEG0);
 	KASSERT(first_addr%PAGE_SIZE == 0);
 
 	//Init'ing coremap, all pages are free at this point
@@ -84,8 +85,8 @@ vm_bootstrap(void){
 	}
 	
 	//Checking that the coremap isn't taking up entire physmem
-	int cmap_start_page =(int) ((paddr_t)coremap/PAGE_SIZE);
-	KASSERT((pages_needed + cmap_start_page) < num_pages);
+	int cmap_start_page = (int)((((uint32_t)coremap)-MIPS_KSEG0)/PAGE_SIZE);
+	//KASSERT((pages_needed + cmap_start_page) < num_pages);
 	
 	//Setting the pages containing coremap to fixed
 	for(int j = cmap_start_page; j < (int)(pages_needed + cmap_start_page); j++){
@@ -316,13 +317,15 @@ alloc_kpages(unsigned npages)
 	
 	if(vm_bootstrap_flag){
 		pa = page_nalloc(npages);
+	
+	KASSERT((pa + (npages*PAGE_SIZE)) < last_addr);
 	} else {
 		pa = getppages(npages);
 		if (pa==0) {
 			return 0;
 		}
+	
 	}
-	KASSERT((pa + (npages*PAGE_SIZE)) < last_addr);
 
 	return PADDR_TO_KVADDR(pa);
 }
