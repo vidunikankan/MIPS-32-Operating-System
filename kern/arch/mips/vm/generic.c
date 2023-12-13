@@ -221,7 +221,7 @@ page_nalloc(unsigned long npages){
 
 		//Update coremap
 		coremap[coremap_idx].page_state = dirty;
-		coremap[coremap_idx].owner_proc = kproc;
+		coremap[coremap_idx].owner_proc = curproc;
 		coremap[coremap_idx].block_id = block_id;
 		coremap[coremap_idx].block_size = npages;
 		continuous_pages++;

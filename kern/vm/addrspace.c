@@ -1,4 +1,5 @@
 /*
+
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
@@ -38,6 +39,8 @@
 #include <vm.h>
 
 #define DUMBVM_STACKPAGES    18
+#define MID_BIT_MASK 0x3FF000
+#define OFFSET_MASK 0xFFF
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
  * assignment, this file is not compiled or linked or in any way
@@ -69,8 +72,11 @@ as_create(void)
         as->as_vbase2 = 0;
         as->as_npages2 = 0;
         as->as_stackpbase = 0;
+		as->as_pbase1 = 0;
+		as->as_pbase2 = 0;
 		as->heap_start = 0;
 		as->heap_end = 0;
+		as->as_stackpbase =  0;
 	return as;
 }
 
@@ -129,6 +135,10 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
+	if(as == NULL){
+		kfree(as);
+		return;
+	}
 
 	for(int i = 0; i < PAGE_SIZE/4; i++){
 		vaddr_t va;
@@ -151,13 +161,14 @@ as_destroy(struct addrspace *as)
 			}
 			kfree((void*)pt_entry);
 		}
+	}
 	//Freeing memory that was allocated for page directory	
 	if(as->page_dir != NULL){
 		kfree(as->page_dir);
 	}
 	//Free addrspace struct
 	kfree(as);
-	}
+	
 }
 
 void
@@ -183,12 +194,12 @@ as_activate(void)
      splx(spl);
 	
 }
-/*static
+static
 void
 as_zero_region(paddr_t paddr, unsigned npages)
  {
      bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
- }*/
+ }
 
 void
 as_deactivate(void)
@@ -257,7 +268,31 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 int
 as_prepare_load(struct addrspace *as)
 {	
-	(void)as;
+     //TODO: fix this garbage
+	 KASSERT(as->as_pbase1 == 0);
+     KASSERT(as->as_pbase2 == 0);
+     KASSERT(as->as_stackpbase == 0);
+
+     as->as_pbase1 = page_nalloc(as->as_npages1);
+	 if (as->as_pbase1 == 0) {
+         return ENOMEM;
+     }
+ 
+     as->as_pbase2 = page_nalloc(as->as_npages2);
+     if (as->as_pbase2 == 0) {
+         return ENOMEM;
+     }
+ 
+     as->as_stackpbase = page_nalloc(DUMBVM_STACKPAGES);
+     if (as->as_stackpbase == 0) {
+         return ENOMEM;
+     }
+ 
+     as_zero_region(as->as_pbase1, as->as_npages1);
+     as_zero_region(as->as_pbase2, as->as_npages2);
+     as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);	
+
+
 	return 0;
 }
 
