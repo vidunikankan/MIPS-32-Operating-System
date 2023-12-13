@@ -11,21 +11,6 @@
 #include <synch.h>
 #include <vm.h>
 
-/*
- * Dumb MIPS-only "VM system" that is intended to only be just barely
- * enough to struggle off the ground. You should replace all of this
- * code while doing the VM assignment. In fact, starting in that
- * assignment, this file is not included in your kernel!
- *
- * NOTE: it's been found over the years that students often begin on
- * the VM assignment by copying dumbvm.c and trying to improve it.
- * This is not recommended. dumbvm is (more or less intentionally) not
- * a good design reference. The first recommendation would be: do not
- * look at dumbvm at all. The second recommendation would be: if you
- * do, be sure to review it from the perspective of comparing it to
- * what a VM system is supposed to do, and understanding what corners
- * it's cutting (there are many) and why, and more importantly, how.
- */
 
 /* under dumbvm, always have 72k of user stack */
 /* (this must be > 64K so argument blocks of size ARG_MAX will fit) */
@@ -462,8 +447,9 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-	vaddr_t *pt_entry;
-	vaddr_t pt_index;
+	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
+	//vaddr_t *pt_entry;
+	//vaddr_t pt_index;
 	paddr_t paddr;
 	int i;
 	uint32_t ehi, elo;
@@ -502,13 +488,46 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		 */
 		return EFAULT;
 	}
-	pt_index = ((faultaddress & MID_BIT_MASK) >> 12);
+	KASSERT(as->as_vbase1 != 0);
+     KASSERT(as->as_pbase1 != 0);
+     KASSERT(as->as_npages1 != 0);
+     KASSERT(as->as_vbase2 != 0);
+     KASSERT(as->as_pbase2 != 0);
+     KASSERT(as->as_npages2 != 0);
+     KASSERT(as->as_stackpbase != 0);
+     KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
+     KASSERT((as->as_pbase1 & PAGE_FRAME) == as->as_pbase1);
+     KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
+     KASSERT((as->as_pbase2 & PAGE_FRAME) == as->as_pbase2);
+     KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
+
+     vbase1 = as->as_vbase1;
+     vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
+     vbase2 = as->as_vbase2;
+     vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
+     stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
+     stacktop = USERSTACK;
+
+     if (faultaddress >= vbase1 && faultaddress < vtop1) {
+		paddr = (faultaddress - vbase1) + as->as_pbase1;
+     }
+     else if (faultaddress >= vbase2 && faultaddress < vtop2) {
+         paddr = (faultaddress - vbase2) + as->as_pbase2;
+     }
+     else if (faultaddress >= stackbase && faultaddress < stacktop) {
+         paddr = (faultaddress - stackbase) + as->as_stackpbase;
+     }
+     else {
+         return EFAULT;
+     }
+
+	/*pt_index = ((faultaddress & MID_BIT_MASK) >> 12);
 	pt_entry = pgdir_walk(as, &faultaddress, 0);
 	if(pt_entry == 0){
 		return EFAULT;
 	}
 	paddr = pt_entry[pt_index] >> 12;
-	
+	*/
 	/* make sure it's page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
