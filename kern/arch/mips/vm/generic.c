@@ -448,6 +448,7 @@ int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
+	vaddr_t vheapbase, vheaptop;
 	//vaddr_t *pt_entry;
 	//vaddr_t pt_index;
 	paddr_t paddr;
@@ -505,6 +506,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
      vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
      vbase2 = as->as_vbase2;
      vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
+	 vheapbase = as->heap_start;
+	 vheaptop = as->heap_end;
      stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
      stacktop = USERSTACK;
 
@@ -514,6 +517,17 @@ vm_fault(int faulttype, vaddr_t faultaddress)
      else if (faultaddress >= vbase2 && faultaddress < vtop2) {
          paddr = (faultaddress - vbase2) + as->as_pbase2;
      }
+	 else if(faultaddress >= vheapbase && faultaddress < vheaptop){
+		
+		vaddr_t *pt_entry = pgdir_walk(as, &faultaddress, 0);
+		
+		if(pt_entry == 0){
+			return EFAULT;
+		}
+		
+		vaddr_t pt_index = (faultaddress & MID_BIT_MASK) >> 12; 
+		paddr = pt_entry[pt_index] >> 12;
+	}
      else if (faultaddress >= stackbase && faultaddress < stacktop) {
          paddr = (faultaddress - stackbase) + as->as_stackpbase;
      }
