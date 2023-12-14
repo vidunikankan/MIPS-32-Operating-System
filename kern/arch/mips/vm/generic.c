@@ -197,7 +197,7 @@ page_nalloc(unsigned long npages){
 		}
 
 		//Check that page is now free
-		//KASSERT(coremap[coremap_idx].page_state == free);
+		KASSERT(coremap[coremap_idx].page_state == free);
 		if(continuous_pages == 0){
 
 			//Set return addr to very first page of continuous npages
@@ -365,7 +365,7 @@ pgdir_walk(struct addrspace *as, vaddr_t *vaddr, uint8_t create_table_flag){
 
 /* Allocate/free some kernel-space virtual pages */
 vaddr_t
-alloc_kpages(size_t npages)
+alloc_kpages(unsigned npages)
 {
 	paddr_t pa;
 	
@@ -490,12 +490,16 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 	KASSERT(as->as_vbase1 != 0);
+     KASSERT(as->as_pbase1 != 0);
      KASSERT(as->as_npages1 != 0);
      KASSERT(as->as_vbase2 != 0);
+     KASSERT(as->as_pbase2 != 0);
      KASSERT(as->as_npages2 != 0);
      KASSERT(as->as_stackpbase != 0);
      KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
+     KASSERT((as->as_pbase1 & PAGE_FRAME) == as->as_pbase1);
      KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
+     KASSERT((as->as_pbase2 & PAGE_FRAME) == as->as_pbase2);
      KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
 
      vbase1 = as->as_vbase1;
@@ -507,6 +511,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
      stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
      stacktop = USERSTACK;
 
+     if (faultaddress >= vbase1 && faultaddress < vtop1) {
+		paddr = (faultaddress - vbase1) + as->as_pbase1;
+     }
+     else if (faultaddress >= vbase2 && faultaddress < vtop2) {
+         paddr = (faultaddress - vbase2) + as->as_pbase2;
+     }
+	 else if(faultaddress >= vheapbase && faultaddress < vheaptop){
+		
 		vaddr_t *pt_entry = pgdir_walk(as, &faultaddress, 0);
 		
 		if(pt_entry == 0){
@@ -514,20 +526,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 		
 		vaddr_t pt_index = (faultaddress & MID_BIT_MASK) >> 12; 
-     
-	 if (faultaddress >= vbase1 && faultaddress < vtop1) {
 		paddr = pt_entry[pt_index] >> 12;
-     }
-	 else if (faultaddress >= vbase2 && faultaddress < vtop2) {
-		paddr = pt_entry[pt_index] >> 12;
-	 }
-	 else if(faultaddress >= vheapbase && faultaddress < vheaptop){
-		paddr = pt_entry[pt_index] >>12;
-		
 	}
      else if (faultaddress >= stackbase && faultaddress < stacktop) {
-		paddr = pt_entry[pt_index] >> 12;
-	 }
+         paddr = (faultaddress - stackbase) + as->as_stackpbase;
+     }
      else {
          return EFAULT;
      }

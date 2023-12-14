@@ -72,17 +72,14 @@ as_create(void)
         as->as_vbase2 = 0;
         as->as_npages2 = 0;
         as->as_stackpbase = 0;
+		as->as_pbase1 = 0;
+		as->as_pbase2 = 0;
 		as->heap_start = 0;
 		as->heap_end = 0;
+		as->as_stackpbase =  0;
 	return as;
 }
 
-static
-void
-as_zero_region(paddr_t paddr, unsigned npages)
- {
-     bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
-}
 int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
@@ -96,9 +93,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	new->as_npages1 = old->as_npages1;
 	new->as_vbase2 = old->as_vbase2;
 	new->as_npages2 = old->as_npages2;
-		
+
 	size_t heap_size = (size_t)(old->heap_end - old->heap_start);
-	
+
 	memmove((void*)new->heap_start,
 	(const void*)old->heap_start, heap_size);
 	
@@ -112,7 +109,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		va = (i << 22);
 		pt_entry_old =(vaddr_t *)pgdir_walk(old, &va, 0);
 		if(pt_entry_old){
-			new->page_dir[i] = new->page_dir[i] & 0xFFFFFFFE; //zeroing "pt_exists" bit so that a new one is created
+			new->page_dir[i] = new->page_dir[i] | 0xFFFFE; //zeroing "pt_exists" bit so that a new one is created
 
 			for(int j = 0; j < PAGE_SIZE/4; j++){
 				vaddr_t new_va = (i << 22)| (j << 12);
@@ -121,45 +118,15 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				//If present, set new pte's present bit
 				if(page_present){
 					page_alloc(new, &new_va);	
-				//TODO: copy page over
 				}
 				//If not present, ignore for now (TODO: with swapping make disk copy)
 			}
-		} else {
+		}else{
 			//zero the page dir entry, so that next time we check pt_exists is false
-			new->page_dir[i] = new->page_dir[i] & 0xFFFFFFFE;
+			new->page_dir[i] = new->page_dir[i] | 0xFFFFFE;
 		}
 	}
 
-	new->as_stackpbase = page_nalloc(DUMBVM_STACKPAGES);
-	if(new->as_stackpbase == 0){
-		return ENOMEM;
-	}
-	as_zero_region(new->as_stackpbase, DUMBVM_STACKPAGES);
-
-	vaddr_t old_stack, new_stack; 
-	int result;
-	(void)result;
-	result = as_define_stack(old, &old_stack);
-	result = as_define_stack(new, &new_stack);
-		
-	memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
-         (const void *)PADDR_TO_KVADDR(old->as_stackpbase),
-         DUMBVM_STACKPAGES*PAGE_SIZE);
-
-	for(int i = 0; i < (int)DUMBVM_STACKPAGES; i++){
-		vaddr_t va1 = (USERSTACK - i*PAGE_SIZE);
-		vaddr_t *pt_entry = pgdir_walk(new, &va1, 1);
-		
-		if(pt_entry == 0){
-			return ENOMEM;
-		}
-		
-		vaddr_t pt_index = (va1 & MID_BIT_MASK) >> 12;
-		pt_entry[pt_index] = (new->as_stackpbase - PAGE_SIZE*i) << 12;
-		
-	}
-	
 
      *ret = new;
      return 0;
@@ -232,12 +199,12 @@ as_activate(void)
      splx(spl);
 	
 }
-/*static
+static
 void
 as_zero_region(paddr_t paddr, unsigned npages)
  {
      bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
- }*/
+ }
 
 void
 as_deactivate(void)
@@ -306,70 +273,30 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 int
 as_prepare_load(struct addrspace *as)
 {	
-	// KASSERT(as->as_pbase1 == 0);
-    // KASSERT(as->as_pbase2 == 0);
-    KASSERT(as->as_stackpbase == 0);
-	//TODO: Call eviction function here once implemented
-    paddr_t pa1, pa2;
-	
-	//TODO: take out physical stack pointer when tlb is implemented
-	as->as_stackpbase = page_nalloc(DUMBVM_STACKPAGES);
-	if(as->as_stackpbase == 0){
-		return ENOMEM;
-	}
-	
-	for(int i = 0; i < (int)DUMBVM_STACKPAGES; i++){
-		vaddr_t va1 = (USERSTACK - i*PAGE_SIZE);
-		vaddr_t *pt_entry = pgdir_walk(as, &va1, 1);
-		
-		if(pt_entry == 0){
-			return ENOMEM;
-		}
-		
-		vaddr_t pt_index = (va1 & MID_BIT_MASK) >> 12;
-		pt_entry[pt_index] = (as->as_stackpbase + PAGE_SIZE*i) << 12;
-		as_zero_region((as->as_stackpbase + PAGE_SIZE*i), 1);
-	}
+     //TODO: fix this garbage
+	 KASSERT(as->as_pbase1 == 0);
+     KASSERT(as->as_pbase2 == 0);
+     KASSERT(as->as_stackpbase == 0);
 
-
-     
-	 pa1 = page_nalloc(as->as_npages1);
-     if (pa1 == 0) {
+     as->as_pbase1 = page_nalloc(as->as_npages1);
+	 if (as->as_pbase1 == 0) {
          return ENOMEM;
      }
-     
-     pa2 = page_nalloc(as->as_npages2);
-     if (pa2 == 0) {
-         return ENOMEM;
-     }	
-
-	for(int i = 0; i < (int)as->as_npages1; i++){
-		vaddr_t va1 = (as->as_vbase1 + i*PAGE_SIZE);
-		vaddr_t *pt_entry = pgdir_walk(as, &va1, 1);
-		
-		if(pt_entry == 0){
-			return ENOMEM;
-		}
-		
-		vaddr_t pt_index = (va1 & MID_BIT_MASK) >> 12;
-		pt_entry[pt_index] = (pa1 + PAGE_SIZE*i) << 12;
-		as_zero_region((pa1 + PAGE_SIZE*i), 1);
-	}
-	
-	for(int i = 0; i <(int) as->as_npages2; i++){
-		vaddr_t va1 = (as->as_vbase2 + i*PAGE_SIZE);
-		vaddr_t *pt_entry = pgdir_walk(as, &va1, 1);
-		
-		if(pt_entry == 0){
-			return ENOMEM;
-		}
-		
-		vaddr_t pt_index = (va1 & MID_BIT_MASK) >> 12;
-		pt_entry[pt_index] = (pa2 + PAGE_SIZE*i) << 12;
-		page_alloc(as, &va1);
-		as_zero_region((pa2 + PAGE_SIZE*i), 1);
-	}
  
+     as->as_pbase2 = page_nalloc(as->as_npages2);
+     if (as->as_pbase2 == 0) {
+         return ENOMEM;
+     }
+ 
+     as->as_stackpbase = page_nalloc(DUMBVM_STACKPAGES);
+     if (as->as_stackpbase == 0) {
+         return ENOMEM;
+     }
+ 
+     as_zero_region(as->as_pbase1, as->as_npages1);
+     as_zero_region(as->as_pbase2, as->as_npages2);
+     as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);	
+
 
 	return 0;
 }
@@ -390,8 +317,8 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 
 	KASSERT(as->as_stackpbase != 0);
+
 	*stackptr = USERSTACK;
-	
 
 	return 0;
 }
