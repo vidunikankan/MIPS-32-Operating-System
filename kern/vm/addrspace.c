@@ -41,6 +41,8 @@
 #define DUMBVM_STACKPAGES    18
 #define MID_BIT_MASK 0x3FF000
 #define OFFSET_MASK 0xFFF
+#define PTEXISTS_MASK 0x1
+#define PG_PRESENT_MASK 0x2
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
  * assignment, this file is not compiled or linked or in any way
@@ -272,21 +274,58 @@ as_prepare_load(struct addrspace *as)
 	 KASSERT(as->as_pbase1 == 0);
      KASSERT(as->as_pbase2 == 0);
      KASSERT(as->as_stackpbase == 0);
-
+	
      as->as_pbase1 = page_nalloc(as->as_npages1);
 	 if (as->as_pbase1 == 0) {
          return ENOMEM;
      }
+	 //Setting PTEs
+	 for(int i = 0; i < (int)as->as_npages1; i++){
+		vaddr_t va1 = (as->as_vbase1 + i*PAGE_SIZE);
+		vaddr_t *pt_entry = pgdir_walk(as, &va1, 1);
+
+		if(pt_entry == 0){
+			return ENOMEM;
+		}
+
+		vaddr_t pt_index = (va1 & MID_BIT_MASK) >> 12;
+		pt_entry[pt_index] = ((as->as_pbase1  + PAGE_SIZE*i) << 12) | PTEXISTS_MASK | PG_PRESENT_MASK;
+	}
  
      as->as_pbase2 = page_nalloc(as->as_npages2);
      if (as->as_pbase2 == 0) {
          return ENOMEM;
      }
+	
+	//Setting PTEs
+	 for(int i = 0; i <(int) as->as_npages2; i++){
+		vaddr_t va1 = (as->as_vbase2 + i*PAGE_SIZE);
+		vaddr_t *pt_entry = pgdir_walk(as, &va1, 1);
+
+		if(pt_entry == 0){
+			return ENOMEM;
+		}
+
+		vaddr_t pt_index = (va1 & MID_BIT_MASK) >> 12;
+		pt_entry[pt_index] = ((as->as_pbase1  + PAGE_SIZE*i) + PAGE_SIZE*i) << 12 | PTEXISTS_MASK | PG_PRESENT_MASK;
+	}
  
      as->as_stackpbase = page_nalloc(DUMBVM_STACKPAGES);
      if (as->as_stackpbase == 0) {
          return ENOMEM;
      }
+
+	 for(int i = 0; i < (int)DUMBVM_STACKPAGES; i++){
+		vaddr_t va1 = (USERSTACK - i*PAGE_SIZE);
+		vaddr_t *pt_entry = pgdir_walk(as, &va1, 1);
+
+		if(pt_entry == 0){
+			return ENOMEM;
+		}
+
+		vaddr_t pt_index = (va1 & MID_BIT_MASK) >> 12;
+		pt_entry[pt_index] = (as->as_stackpbase + PAGE_SIZE*i) << 12 | PTEXISTS_MASK | PG_PRESENT_MASK;
+	}
  
      as_zero_region(as->as_pbase1, as->as_npages1);
      as_zero_region(as->as_pbase2, as->as_npages2);

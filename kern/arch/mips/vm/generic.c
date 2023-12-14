@@ -130,7 +130,7 @@ getppages(unsigned long npages)
 }
 
 //Called by alloc_kpages() when we need n continuous pages for kernel use 
-//TODO: should be static, change back to static & update header once addrspace.c no longer needs this function
+//DOES NOT set page directory or PTEs, up to caller!!
 paddr_t
 page_nalloc(unsigned long npages){
 	
@@ -260,7 +260,6 @@ make_page_avail(paddr_t page){
 
 void
 page_alloc(struct addrspace *as, vaddr_t *va){
-	//TODO: add as, va info in as parameters. Add swap info (where page is) into coremap_entry struct
 	paddr_t free_ptr;
 	paddr_t last_ptr;
 	int block_id;
@@ -268,18 +267,18 @@ page_alloc(struct addrspace *as, vaddr_t *va){
 	paddr_t paddr;
 	vaddr_t vaddr = *va;
 	lock_acquire(addr_pointers_lock);
+		
 		free_ptr = first_free;
 		last_ptr = last_addr;
-		//TODO: check that the incremented free ptr actually points to a free & NON-FIXED page!
-		//TODO: add check to make sure free pointer wraps around if it goes over last addr
 		first_free += PAGE_SIZE;
+		
 		if(first_free > last_addr) first_free = 0;
 
 		lock_acquire(coremap_lock);
 			while(coremap[(first_free/PAGE_SIZE)].page_state != free){
 				first_free+= PAGE_SIZE;
 				if(first_free == last_addr){
-					first_free = 0;
+					first_free = first_addr;
 					break;
 				}
 			}
@@ -309,10 +308,8 @@ page_alloc(struct addrspace *as, vaddr_t *va){
 	lock_release(coremap_lock);
 	
 	paddr = (coremap_idx*PAGE_SIZE);
-	//vaddr = (vaddr_t)(paddr + MIPS_KUSEG); //TODO: check if this is a correct initial pa->va translation
 	vaddr_t pgdir_index = (vaddr & TOP_BIT_MASK) >> 22;
 	
-	//TODO: set other bits when they are implemented
 	uint8_t pt_exists = as->page_dir[pgdir_index] & PTEXISTS_MASK;
 	
 	//Create second-level PT if it DNE
@@ -338,6 +335,24 @@ page_alloc(struct addrspace *as, vaddr_t *va){
 	return;
 }
 
+void
+create_pte(struct addrspace *as, vaddr_t *vaddr){
+	vaddr_t va = *vaddr;	
+	vaddr_t pgdir_index = (va & TOP_BIT_MASK) >> 22;
+
+		//Storing physical addr of second PT in page directory
+		uint32_t *temp = kmalloc(PAGE_SIZE);
+		if(temp == NULL){
+			//TODO: Undo coremap stuff from above
+			panic("Ruh roh ENOMEM");
+		}
+		as->page_dir[pgdir_index] = (((uint32_t)temp - MIPS_KSEG0) << 12);
+		//Setting ptexists bit for page directory entry
+		as->page_dir[pgdir_index] = as->page_dir[pgdir_index] | PTEXISTS_MASK | PG_PRESENT_MASK;	
+
+}
+
+
 /*Given an address space and virtual address, returns a kvaddr pointer (kernel heap) to page table entry.
 Creates new pt entry if flag set, returns 0 if flag not set and entry DNE.*/
 vaddr_t*
@@ -353,7 +368,7 @@ pgdir_walk(struct addrspace *as, vaddr_t *vaddr, uint8_t create_table_flag){
 	} else {
 		//TODO: check if page on disk before creating table
 		if(create_table_flag){
-			page_alloc(as, vaddr);
+			create_pte(as, vaddr);
 			pt_entry = (vaddr_t*)PADDR_TO_KVADDR((as->page_dir[pgdir_index] & DESEL_OFFSET) >> 12);
 			return pt_entry;
 		}

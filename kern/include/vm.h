@@ -78,7 +78,7 @@ void make_page_avail(paddr_t);
 void page_alloc(struct addrspace*, vaddr_t*);
 vaddr_t* pgdir_walk(struct addrspace*, vaddr_t*, uint8_t);
 void page_free(vaddr_t);
-
+void create_pte(struct addrspace*, vaddr_t*);
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
