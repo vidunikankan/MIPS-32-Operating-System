@@ -89,11 +89,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	if (new==NULL) {
 		return ENOMEM;
 	}
-	new->as_vbase1 = old->as_vbase1;
-	new->as_npages1 = old->as_npages1;
-	new->as_vbase2 = old->as_vbase2;
-	new->as_npages2 = old->as_npages2;
-
 	size_t heap_size = (size_t)(old->heap_end - old->heap_start);
 
 	memmove((void*)new->heap_start,
